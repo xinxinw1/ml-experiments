@@ -2,19 +2,12 @@ import tensorflow as tf
 import numpy as np
 import uuid
 
+import my_logging as logging
+
 class LSTMModel(object):
-    def __init__(self):
+    def __init__(self, alphabet_size):
         self.uuid = uuid.uuid4()
-        print('Running __init__ %s' % self.uuid)
-        self.sess = None
-
-    def __del__(self):
-        print('Running __del__ %s' % self.uuid)
-        if self.sess is not None:
-            self.sess.close()
-            print('Closed session %s' % self.uuid)
-
-    def init_from_scratch(self, alphabet_size):
+        logging.info('Running __init__ %s' % self.uuid)
         self.graph = tf.Graph()
 
         with self.graph.as_default():
@@ -52,8 +45,21 @@ class LSTMModel(object):
 
             self.probabilities = tf.nn.softmax(self.logits, name='probabilities')
 
+            self.saver = tf.train.Saver()
+
             self.sess = tf.Session(graph=self.graph)
             self.sess.run(tf.global_variables_initializer())
+
+    def __del__(self):
+        logging.info('Running __del__ %s' % self.uuid)
+        self.sess.close()
+        logging.info('Closed session %s' % self.uuid)
+
+    def save_to_file(self, f):
+        self.saver.save(self.sess, f)
+
+    def load_from_file(self, f):
+        self.saver.restore(self.sess, f)
 
     def train(self, inputs):
         for i, input in enumerate(inputs):
@@ -61,25 +67,4 @@ class LSTMModel(object):
             self.sess.run(self.optimize, feed_dict={self.inputs: batch})
             loss_mean = self.sess.run(self.loss_mean, feed_dict={self.inputs: batch})
             print('Step %s: loss: %s' % (i, loss_mean))
-
-    def export_to_str(self):
-        return self.graph.as_graph_def().SerializeToString()
-
-    def init_from_str(self, graph_def_str):
-        self.graph = tf.Graph()
-        with self.graph.as_default():
-            graph_def = tf.GraphDef()
-            graph_def.ParseFromString(graph_def_str)
-            tf.import_graph_def(graph_def, name='')
-
-            self.inputs = self.graph.get_tensor_by_name('inputs:0')
-            self.logits = self.graph.get_tensor_by_name('logits:0')
-            self.losses = self.graph.get_tensor_by_name('losses:0')
-            self.loss_mean = self.graph.get_tensor_by_name('loss_mean:0')
-            self.loss_max = self.graph.get_tensor_by_name('loss_max:0')
-            self.loss_sum = self.graph.get_tensor_by_name('loss_sum:0')
-            self.optimize = self.graph.get_operation_by_name('optimize')
-            self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
-
-            self.sess = tf.Session(graph=self.graph)
 
