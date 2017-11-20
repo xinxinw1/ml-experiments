@@ -10,7 +10,7 @@ import numpy as np
 from datetime import datetime
 import uuid
 import os
-import pickle
+import json
 
 import my_logging as logging
 
@@ -98,18 +98,21 @@ class LSTMModelBase(object):
     def init_from_file(self, name):
         self.close_sess_if_open()
 
-        meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.pkl')
-        with open(meta_file_path, 'rb') as f:
-            meta = pickle.load(f)
+        extra_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.json')
+        with open(extra_file_path, 'r') as f:
+            extra = json.load(f)
 
-        self.alphabet_size = meta['alphabet_size']
-        graph_def_str = meta['graph_def_str']
+        self.alphabet_size = extra['alphabet_size']
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            graph_def = tf.GraphDef()
-            graph_def.ParseFromString(graph_def_str)
-            tf.import_graph_def(graph_def, name='')
+            self.sess = tf.Session(graph=self.graph)
+
+            meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.meta')
+            self.saver = tf.train.import_meta_graph(meta_file_path)
+
+            file_path = os.path.join(config.SAVED_MODELS_DIR, name)
+            self.saver.restore(self.sess, file_path)
 
             self.inputs = self.graph.get_tensor_by_name('inputs:0')
             self.logits = self.graph.get_tensor_by_name('logits:0')
@@ -121,14 +124,7 @@ class LSTMModelBase(object):
             self.adadelta_optimize = self.graph.get_operation_by_name('adadelta_optimize')
             self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
 
-            self.saver = tf.train.Saver()
-
             self.summary = self.graph.get_tensor_by_name('summary:0')
-
-            self.sess = tf.Session(graph=self.graph)
-
-        file_path = os.path.join(config.SAVED_MODELS_DIR, name)
-        self.saver.restore(self.sess, file_path)
 
         logging.info('Loaded from file %s' % file_path)
 
@@ -138,13 +134,12 @@ class LSTMModelBase(object):
         file_path = os.path.join(config.SAVED_MODELS_DIR, name)
         self.saver.save(self.sess, file_path)
 
-        meta = {
+        extra = {
             'alphabet_size': self.alphabet_size,
-            'graph_def_str': self.graph.as_graph_def().SerializeToString()
         }
-        meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.pkl')
-        with open(meta_file_path, 'wb') as f:
-            pickle.dump(meta, f)
+        extra_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.json')
+        with open(extra_file_path, 'w') as f:
+            json.dump(extra, f)
 
         logging.info('Saved to file %s' % file_path)
 
