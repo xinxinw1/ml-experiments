@@ -10,6 +10,7 @@ import numpy as np
 from datetime import datetime
 import uuid
 import os
+import shutil
 import json
 
 import my_logging as logging
@@ -26,10 +27,17 @@ def pad_to_same_len(lst_of_lsts, pad_item):
     max_len = max(map(len, lst_of_lsts))
     return list(map(lambda lst: pad_to_len(lst, max_len, pad_item), lst_of_lsts))
 
+def rmdir_if_exists(path):
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
+
 class LSTMModelBase(object):
-    def __init__(self):
+    def __init__(self, name):
         self.uuid = uuid.uuid4()
         logging.info('Running __init__ %s' % self.uuid)
+        self.name = name
         self.sess = None
 
     def __del__(self):
@@ -61,7 +69,7 @@ class LSTMModelBase(object):
             # inputs_one_hot is a list of batches where each batch is a list of one hot encoded lists
             # inputs_one_hot is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
 
-            state_sizes = [self.alphabet_size+1] * 1
+            state_sizes = [2*(self.alphabet_size+1)] * 1
             lstm_cells = list(map(tf.contrib.rnn.BasicLSTMCell, state_sizes))
             lstm = tf.contrib.rnn.MultiRNNCell(lstm_cells)
             rnn_output, state = tf.nn.dynamic_rnn(lstm, self.inputs_one_hot, dtype=tf.float32)
@@ -79,6 +87,8 @@ class LSTMModelBase(object):
             tf.summary.scalar('loss_mean', self.loss_mean)
             self.loss_max = tf.reduce_max(self.losses, name='loss_max')
             tf.summary.scalar('loss_max', self.loss_max)
+            self.loss_min = tf.reduce_min(self.losses, name='loss_min')
+            tf.summary.scalar('loss_min', self.loss_min)
             self.loss_sum = tf.reduce_sum(self.losses, name='loss_sum')
             tf.summary.scalar('loss_sum', self.loss_sum)
             # loss_* is a tensor with a single float
@@ -95,10 +105,11 @@ class LSTMModelBase(object):
             self.sess = tf.Session(graph=self.graph)
             self.sess.run(tf.global_variables_initializer())
 
-    def init_from_file(self, name):
+    def init_from_file(self):
         self.close_sess_if_open()
 
-        extra_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.json')
+        file_path = os.path.join(config.SAVED_MODELS_DIR, self.name, config.TAG)
+        extra_file_path = file_path + '.json'
         with open(extra_file_path, 'r') as f:
             extra = json.load(f)
 
@@ -108,10 +119,9 @@ class LSTMModelBase(object):
         with self.graph.as_default():
             self.sess = tf.Session(graph=self.graph)
 
-            meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.meta')
+            meta_file_path = file_path + '.meta'
             self.saver = tf.train.import_meta_graph(meta_file_path)
 
-            file_path = os.path.join(config.SAVED_MODELS_DIR, name)
             self.saver.restore(self.sess, file_path)
 
             self.inputs = self.graph.get_tensor_by_name('inputs:0')
@@ -119,6 +129,7 @@ class LSTMModelBase(object):
             self.losses = self.graph.get_tensor_by_name('losses:0')
             self.loss_mean = self.graph.get_tensor_by_name('loss_mean:0')
             self.loss_max = self.graph.get_tensor_by_name('loss_max:0')
+            self.loss_min = self.graph.get_tensor_by_name('loss_min:0')
             self.loss_sum = self.graph.get_tensor_by_name('loss_sum:0')
             self.adam_optimize = self.graph.get_operation_by_name('adam_optimize')
             self.adadelta_optimize = self.graph.get_operation_by_name('adadelta_optimize')
@@ -128,26 +139,32 @@ class LSTMModelBase(object):
 
         logging.info('Loaded from file %s' % file_path)
 
-    def save_to_file(self, name=None):
-        if name is None:
-            name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        file_path = os.path.join(config.SAVED_MODELS_DIR, name)
+    def save_to_file(self):
+        save_dir = os.path.join(config.SAVED_MODELS_DIR, self.name)
+        rmdir_if_exists(save_dir)
+        os.makedirs(save_dir, exist_ok=True)
+
+        file_path = os.path.join(save_dir, config.TAG)
         self.saver.save(self.sess, file_path)
 
         extra = {
             'alphabet_size': self.alphabet_size,
         }
-        extra_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.json')
+        extra_file_path = file_path + '.json'
         with open(extra_file_path, 'w') as f:
             json.dump(extra, f)
 
-        logging.info('Saved to file %s' % file_path)
+        logging.info('Saved model to file %s' % file_path)
 
     def train(self, inputs, optimize=None):
         if optimize is None:
             optimize = self.adam_optimize
-        date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        summaries_dir = os.path.join(config.SAVED_SUMMARIES_DIR, date)
+
+        save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
+        rmdir_if_exists(save_dir)
+        os.makedirs(save_dir, exist_ok=True)
+
+        summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)
         summary_writer = tf.summary.FileWriter(summaries_dir)
         batches = group(inputs, 10)
@@ -156,8 +173,9 @@ class LSTMModelBase(object):
             summary, _ = self.sess.run([self.summary, optimize], feed_dict={self.inputs: batch})
             summary_writer.add_summary(summary, i)
             if i % 100 == 0:
-                loss_max, loss_mean = self.sess.run([self.loss_max, self.loss_mean], feed_dict={self.inputs: batch})
-                logging.info('Step %s: loss_max: %s loss_mean: %s' % (i, loss_max, loss_mean))
+                loss_max, loss_mean, loss_min = self.sess.run([self.loss_max, self.loss_mean, self.loss_min],
+                        feed_dict={self.inputs: batch})
+                logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                 #losses, loss_mean, probabilities = self.sess.run([self.losses, self.loss_mean, self.probabilities], feed_dict={self.inputs: batch})
                 #logging.info('Step %s: loss: %s losses: %s probs: %s' % (i, loss_mean, losses, probabilities))
         logging.info('Saved summaries to %s' % summaries_dir)
@@ -182,11 +200,11 @@ class LSTMModelBase(object):
             print('%-3s %-11.8f %s' % (item, loss, probs))
 
 class LSTMModel(LSTMModelBase):
-    def __init__(self, alphabet_size):
-        super(LSTMModel, self).__init__()
+    def __init__(self, name, alphabet_size):
+        super(LSTMModel, self).__init__(name)
         self.init_from_scratch(alphabet_size)
 
 class LSTMModelFile(LSTMModelBase):
     def __init__(self, name):
-        super(LSTMModelFile, self).__init__()
-        self.init_from_file(name)
+        super(LSTMModelFile, self).__init__(name)
+        self.init_from_file()
