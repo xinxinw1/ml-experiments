@@ -3,28 +3,13 @@ import numpy as np
 from datetime import datetime
 import uuid
 import os
-import shutil
 import json
 
 import my_logging as logging
 
 import config
 
-def group(lst, n):
-    return (lst[i:i+n] for i in range(0, len(lst), n))
-
-def pad_to_len(lst, max_len, pad_item):
-    return lst + [pad_item] * max(0, max_len-len(lst))
-
-def pad_to_same_len(lst_of_lsts, pad_item):
-    max_len = max(map(len, lst_of_lsts))
-    return list(map(lambda lst: pad_to_len(lst, max_len, pad_item), lst_of_lsts))
-
-def rmdir_if_exists(path):
-    try:
-        shutil.rmtree(path)
-    except FileNotFoundError:
-        pass
+import tools
 
 class LSTMModelBase(object):
     def __init__(self, name):
@@ -47,31 +32,31 @@ class LSTMModelBase(object):
         self.close_sess_if_open()
 
         self.alphabet_size = alphabet_size
+        self.effective_alphabet_size = alphabet_size + 2
         self.graph = tf.Graph()
 
         with self.graph.as_default():
             self.inputs = tf.placeholder(tf.int32, shape=(None, None), name='inputs')
-            # inputs is list of batches where each batch is a list of integers in [0, alphabet_size)
+            self.labels = tf.placeholder(tf.int32, shape=(None, None), name='labels')
+            # inputs is list of batches where each batch is a list of integers in [0, alphabet_size]
             # inputs is tensor with dim batch_size x timesteps
 
-            self.inputs_padded = tf.pad(self.inputs, [[0, 0], [1, 0]], constant_values=self.alphabet_size, name='inputs_padded')
-            self.labels_padded = tf.pad(self.inputs, [[0, 0], [0, 1]], constant_values=self.alphabet_size, name='labels_padded')
             # inputs_padded and labels_padded are tensors with dim batch_size x (timesteps+1)
 
-            self.inputs_one_hot = tf.one_hot(self.inputs_padded, self.alphabet_size+1, name='inputs_one_hot')
+            self.inputs_one_hot = tf.one_hot(self.inputs, self.effective_alphabet_size, name='inputs_one_hot')
             # inputs_one_hot is a list of batches where each batch is a list of one hot encoded lists
             # inputs_one_hot is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
 
-            state_sizes = [2*(self.alphabet_size+1)] * 1
+            state_sizes = [2*self.effective_alphabet_size] * 1
             lstm_cells = list(map(tf.contrib.rnn.BasicLSTMCell, state_sizes))
             lstm = tf.contrib.rnn.MultiRNNCell(lstm_cells)
             rnn_output, state = tf.nn.dynamic_rnn(lstm, self.inputs_one_hot, dtype=tf.float32)
             # rnn_outputs is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
-            logits = tf.contrib.layers.fully_connected(rnn_output, self.alphabet_size+1, activation_fn=None)
+            logits = tf.contrib.layers.fully_connected(rnn_output, self.effective_alphabet_size, activation_fn=None)
             self.logits = tf.identity(logits, name='logits')
 
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    labels=self.labels_padded,
+                    labels=self.labels,
                     logits=self.logits)
             self.losses = tf.identity(losses, name='losses')
             # losses is a tensor with dim batch_size x (timestamps+1)
@@ -118,6 +103,7 @@ class LSTMModelBase(object):
             self.saver.restore(self.sess, file_path)
 
             self.inputs = self.graph.get_tensor_by_name('inputs:0')
+            self.labels = self.graph.get_tensor_by_name('labels:0')
             self.logits = self.graph.get_tensor_by_name('logits:0')
             self.losses = self.graph.get_tensor_by_name('losses:0')
             self.loss_mean = self.graph.get_tensor_by_name('loss_mean:0')
@@ -133,7 +119,7 @@ class LSTMModelBase(object):
 
     def save_to_file(self):
         save_dir = os.path.join(config.SAVED_MODELS_DIR, self.name)
-        rmdir_if_exists(save_dir)
+        tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
 
         file_path = os.path.join(save_dir, config.TAG)
@@ -148,22 +134,34 @@ class LSTMModelBase(object):
 
         logging.info('Saved model to file %s' % file_path)
 
+    def run_batch(self, tensors, batch):
+        """
+        batch: tuple (inputs_batch, labels_batch)
+        """
+        inputs, labels = batch
+        # print(inputs, labels)
+        return self.sess.run(tensors, feed_dict={self.inputs: inputs, self.labels: labels})
+
+    def run_single(self, tensors, lst):
+        batches = tools.make_batches([lst], batch_size=1, max_single_len=None,
+                token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
+        return self.run_batch(tensors, next(batches))
+
     def train(self, inputs):
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
-        rmdir_if_exists(save_dir)
+        tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
 
         summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)
         summary_writer = tf.summary.FileWriter(summaries_dir)
-        batches = group(inputs, 10)
+        batches = tools.make_batches(inputs, batch_size=10, max_single_len=5,
+                token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
         for i, batch in enumerate(batches):
-            batch = pad_to_same_len(batch, self.alphabet_size)
-            summary, _ = self.sess.run([self.summary, self.optimize], feed_dict={self.inputs: batch})
+            summary, _ = self.run_batch([self.summary, self.optimize], batch)
             summary_writer.add_summary(summary, i)
             if i % 100 == 0:
-                loss_max, loss_mean, loss_min = self.sess.run([self.loss_max, self.loss_mean, self.loss_min],
-                        feed_dict={self.inputs: batch})
+                loss_max, loss_mean, loss_min = self.run_batch([self.loss_max, self.loss_mean, self.loss_min], batch)
                 logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                 #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                 #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
@@ -172,7 +170,7 @@ class LSTMModelBase(object):
     def sample(self, starting=[], max_num=1000):
         curr = list(starting)
         for i in range(max_num):
-            probs_batch = self.sess.run(self.probabilities, feed_dict={self.inputs: [curr]})
+            probs_batch = self.run_single(self.probabilities, curr)
             probs = probs_batch[0][-1]
             next_int = np.random.choice(self.alphabet_size+1, 1, p=probs).item()
             logging.info('Step %s: curr: %s next_int: %s probs: %s' % (i, curr, next_int, probs))
@@ -182,7 +180,7 @@ class LSTMModelBase(object):
         return curr
 
     def analyze(self, lst):
-        losses_batch, probs_batch = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: [lst]})
+        losses_batch, probs_batch = self.run_single([self.losses, self.probabilities], lst)
         losses = losses_batch[0].tolist()
         probs_list = probs_batch[0].tolist()
         for item, loss, probs in zip(lst + [self.alphabet_size], losses, probs_list):
