@@ -10,6 +10,7 @@ import numpy as np
 from datetime import datetime
 import uuid
 import os
+import pickle
 
 import my_logging as logging
 
@@ -25,10 +26,24 @@ def pad_to_same_len(lst_of_lsts, pad_item):
     max_len = max(map(len, lst_of_lsts))
     return list(map(lambda lst: pad_to_len(lst, max_len, pad_item), lst_of_lsts))
 
-class LSTMModel(object):
-    def __init__(self, alphabet_size):
+class LSTMModelBase(object):
+    def __init__(self):
         self.uuid = uuid.uuid4()
         logging.info('Running __init__ %s' % self.uuid)
+        self.sess = None
+
+    def __del__(self):
+        logging.info('Running __del__ %s' % self.uuid)
+        self.close_sess_if_open()
+
+    def close_sess_if_open(self):
+        if self.sess is not None:
+            self.sess.close()
+            self.sess = None
+            logging.info('Closed session %s' % self.uuid)
+
+    def init_from_scratch(self, alphabet_size):
+        self.close_sess_if_open()
 
         self.alphabet_size = alphabet_size
         self.graph = tf.Graph()
@@ -75,27 +90,63 @@ class LSTMModel(object):
 
             self.saver = tf.train.Saver()
 
-            self.summary = tf.summary.merge_all()
+            self.summary = tf.identity(tf.summary.merge_all(), name='summary')
 
             self.sess = tf.Session(graph=self.graph)
             self.sess.run(tf.global_variables_initializer())
 
-    def __del__(self):
-        logging.info('Running __del__ %s' % self.uuid)
-        self.sess.close()
-        logging.info('Closed session %s' % self.uuid)
+    def init_from_file(self, name):
+        self.close_sess_if_open()
+
+        meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.pkl')
+        with open(meta_file_path, 'rb') as f:
+            meta = pickle.load(f)
+
+        self.alphabet_size = meta['alphabet_size']
+        graph_def_str = meta['graph_def_str']
+
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(graph_def_str)
+            tf.import_graph_def(graph_def, name='')
+
+            self.inputs = self.graph.get_tensor_by_name('inputs:0')
+            self.logits = self.graph.get_tensor_by_name('logits:0')
+            self.losses = self.graph.get_tensor_by_name('losses:0')
+            self.loss_mean = self.graph.get_tensor_by_name('loss_mean:0')
+            self.loss_max = self.graph.get_tensor_by_name('loss_max:0')
+            self.loss_sum = self.graph.get_tensor_by_name('loss_sum:0')
+            self.adam_optimize = self.graph.get_operation_by_name('adam_optimize')
+            self.adadelta_optimize = self.graph.get_operation_by_name('adadelta_optimize')
+            self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
+
+            self.saver = tf.train.Saver()
+
+            self.summary = self.graph.get_tensor_by_name('summary:0')
+
+            self.sess = tf.Session(graph=self.graph)
+
+        file_path = os.path.join(config.SAVED_MODELS_DIR, name)
+        self.saver.restore(self.sess, file_path)
+
+        logging.info('Loaded from file %s' % file_path)
 
     def save_to_file(self, name=None):
         if name is None:
             name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         file_path = os.path.join(config.SAVED_MODELS_DIR, name)
         self.saver.save(self.sess, file_path)
-        logging.info('Saved to file %s' % file_path)
 
-    def load_from_file(self, name):
-        file_path = os.path.join(config.SAVED_MODELS_DIR, name)
-        self.saver.restore(self.sess, file_path)
-        logging.info('Loaded from file %s' % file_path)
+        meta = {
+            'alphabet_size': self.alphabet_size,
+            'graph_def_str': self.graph.as_graph_def().SerializeToString()
+        }
+        meta_file_path = os.path.join(config.SAVED_MODELS_DIR, name + '.pkl')
+        with open(meta_file_path, 'wb') as f:
+            pickle.dump(meta, f)
+
+        logging.info('Saved to file %s' % file_path)
 
     def train(self, inputs, optimize=None):
         if optimize is None:
@@ -134,3 +185,13 @@ class LSTMModel(object):
         probs_list = probs_batch[0].tolist()
         for item, loss, probs in zip(lst + [self.alphabet_size], losses, probs_list):
             print('%-3s %-11.8f %s' % (item, loss, probs))
+
+class LSTMModel(LSTMModelBase):
+    def __init__(self, alphabet_size):
+        super(LSTMModel, self).__init__()
+        self.init_from_scratch(alphabet_size)
+
+class LSTMModelFile(LSTMModelBase):
+    def __init__(self, name):
+        super(LSTMModelFile, self).__init__()
+        self.init_from_file(name)
