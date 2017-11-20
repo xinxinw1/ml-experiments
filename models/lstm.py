@@ -93,8 +93,8 @@ class LSTMModelBase(object):
             tf.summary.scalar('loss_sum', self.loss_sum)
             # loss_* is a tensor with a single float
 
-            self.adam_optimize = tf.train.AdamOptimizer().minimize(self.loss_mean, name='adam_optimize')
-            self.adadelta_optimize = tf.train.AdadeltaOptimizer(0.03).minimize(self.loss_mean, name='adadelta_optimize')
+            self.optimize = tf.train.AdamOptimizer().minimize(self.loss_mean, name='optimize')
+            # self.optimize = tf.train.AdadeltaOptimizer(0.03).minimize(self.loss_mean, name='optimize')
 
             self.probabilities = tf.nn.softmax(self.logits, name='probabilities')
 
@@ -131,8 +131,7 @@ class LSTMModelBase(object):
             self.loss_max = self.graph.get_tensor_by_name('loss_max:0')
             self.loss_min = self.graph.get_tensor_by_name('loss_min:0')
             self.loss_sum = self.graph.get_tensor_by_name('loss_sum:0')
-            self.adam_optimize = self.graph.get_operation_by_name('adam_optimize')
-            self.adadelta_optimize = self.graph.get_operation_by_name('adadelta_optimize')
+            self.optimize = self.graph.get_operation_by_name('optimize')
             self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
 
             self.summary = self.graph.get_tensor_by_name('summary:0')
@@ -156,10 +155,7 @@ class LSTMModelBase(object):
 
         logging.info('Saved model to file %s' % file_path)
 
-    def train(self, inputs, optimize=None):
-        if optimize is None:
-            optimize = self.adam_optimize
-
+    def train(self, inputs):
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
         rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
@@ -170,7 +166,7 @@ class LSTMModelBase(object):
         batches = group(inputs, 10)
         for i, batch in enumerate(batches):
             batch = pad_to_same_len(batch, self.alphabet_size)
-            summary, _ = self.sess.run([self.summary, optimize], feed_dict={self.inputs: batch})
+            summary, _ = self.sess.run([self.summary, self.optimize], feed_dict={self.inputs: batch})
             summary_writer.add_summary(summary, i)
             if i % 100 == 0:
                 loss_max, loss_mean, loss_min = self.sess.run([self.loss_max, self.loss_mean, self.loss_min],
