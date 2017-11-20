@@ -128,3 +128,9 @@ class LSTMModel(object):
             curr.append(next_int)
         return curr
 
+    def analyze(self, lst):
+        losses_batch, probs_batch = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: [lst]})
+        losses = losses_batch[0].tolist()
+        probs_list = probs_batch[0].tolist()
+        for item, loss, probs in zip(lst + [self.alphabet_size], losses, probs_list):
+            print('%-3s %-11.8f %s' % (item, loss, probs))
