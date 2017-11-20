@@ -1,10 +1,3 @@
-"""
-Interesting examples:
-
-model = lstm.LSTMModel(2)
-model.train([(lambda n: [1]*n + [0]*n)(np.random.randint(0, 10)) for i in range(20000)])
-"""
-
 import tensorflow as tf
 import numpy as np
 from datetime import datetime
@@ -172,8 +165,8 @@ class LSTMModelBase(object):
                 loss_max, loss_mean, loss_min = self.sess.run([self.loss_max, self.loss_mean, self.loss_min],
                         feed_dict={self.inputs: batch})
                 logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
-                #losses, loss_mean, probabilities = self.sess.run([self.losses, self.loss_mean, self.probabilities], feed_dict={self.inputs: batch})
-                #logging.info('Step %s: loss: %s losses: %s probs: %s' % (i, loss_mean, losses, probabilities))
+                #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
+                #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
         logging.info('Saved summaries to %s' % summaries_dir)
 
     def sample(self, starting=[], max_num=1000):
