@@ -32,7 +32,7 @@ class LSTMModelBase(object):
         self.close_sess_if_open()
 
         self.alphabet_size = alphabet_size
-        self.effective_alphabet_size = alphabet_size + 2
+        self.effective_alphabet_size = alphabet_size + 1
         self.graph = tf.Graph()
 
         with self.graph.as_default():
@@ -111,6 +111,8 @@ class LSTMModelBase(object):
             extra = json.load(f)
 
         self.alphabet_size = extra['alphabet_size']
+        self.effective_alphabet_size = extra['effective_alphabet_size']
+        self.state_sizes = extra['state_sizes']
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -132,6 +134,11 @@ class LSTMModelBase(object):
             self.optimize = self.graph.get_operation_by_name('optimize')
             self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
 
+            self.init_states = tuple(self.graph.get_tensor_by_name('init_state_' + str(i) + ':0')
+                    for i in range(len(self.state_sizes)))
+            self.output_states = tuple(self.graph.get_tensor_by_name('output_state_' + str(i) + ':0')
+                    for i in range(len(self.state_sizes)))
+
             self.summary = self.graph.get_tensor_by_name('summary:0')
 
         logging.info('Loaded from file %s' % file_path)
@@ -146,6 +153,8 @@ class LSTMModelBase(object):
 
         extra = {
             'alphabet_size': self.alphabet_size,
+            'effective_alphabet_size': self.effective_alphabet_size,
+            'state_sizes': self.state_sizes
         }
         extra_file_path = file_path + '.json'
         with open(extra_file_path, 'w') as f:
@@ -153,7 +162,7 @@ class LSTMModelBase(object):
 
         logging.info('Saved model to file %s' % file_path)
 
-    def run_batch_with_state(self, tensors, batch, curr_states):
+    def run_batch_with_state(self, tensors, batch, curr_states=None):
         """
         batch: tuple (inputs_batch, labels_batch)
         Returns:
@@ -161,20 +170,27 @@ class LSTMModelBase(object):
         """
         return self.run_batch(tensors + [self.output_states], batch, curr_states)
 
-    def run_batch(self, tensors, batch, curr_states):
+    def run_batch(self, tensors, batch, curr_states=None):
         """
         batch: tuple (inputs_batch, labels_batch)
         Returns:
             A list of outputs tensor_outputs
         """
         inputs, labels = batch
-        # print(inputs, labels)
+        print(inputs, labels)
+        if curr_states is None:
+            batch_size = inputs.shape[0]
+            def make_current_state(state_size):
+                return np.zeros((2, batch_size, state_size))
+
+            curr_states = tuple(map(make_current_state, self.state_sizes))
+
         feed_dict = {self.inputs: inputs, self.labels: labels, self.init_states: curr_states}
         return self.sess.run(tensors, feed_dict=feed_dict)
 
     def run_single(self, tensors, lst):
         batches = tools.make_batches([lst], batch_size=1, max_single_len=None,
-                token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
+                token_item=self.alphabet_size, pad_item=self.alphabet_size)
         return self.run_batch(tensors, next(batches))
 
     def train(self, inputs):
@@ -187,15 +203,12 @@ class LSTMModelBase(object):
         summary_writer = tf.summary.FileWriter(summaries_dir)
 
         batch_size = 10
-        max_single_len = 5
+        max_single_len = 3
 
         batches = tools.make_batches(inputs, batch_size, max_single_len,
                 token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
 
-        def make_current_state(state_size):
-            return np.zeros((2, batch_size, state_size))
-
-        curr_states = tuple(map(make_current_state, self.state_sizes))
+        curr_states = None
         for i, batch in enumerate(batches):
             summary, _, new_states = self.run_batch_with_state([self.summary, self.optimize], batch, curr_states)
             summary_writer.add_summary(summary, i)
@@ -212,7 +225,7 @@ class LSTMModelBase(object):
         for i in range(max_num):
             probs_batch = self.run_single(self.probabilities, curr)
             probs = probs_batch[0][-1]
-            next_int = np.random.choice(self.alphabet_size+1, 1, p=probs).item()
+            next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
             logging.info('Step %s: curr: %s next_int: %s probs: %s' % (i, curr, next_int, probs))
             if next_int == self.alphabet_size:
                 break
