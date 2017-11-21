@@ -20,6 +20,9 @@ class Encoding(ABC):
 
     @abstractmethod
     def encode_single(self, inpt):
+        """
+        Must return a list, not an iterable
+        """
         pass
 
     @abstractmethod
@@ -66,9 +69,33 @@ class StringEncoding(Encoding):
     def empty(self):
         return ''
 
+class StringAlphabetEncoding(Encoding):
+    def __init__(self, alphabet_size=26):
+        self.alphabet_size = alphabet_size
+        assert alphabet_size <= 26
+
+    def encode_char(self, c):
+        o = ord(c) - ord('a')
+        if not 0 <= o < self.alphabet_size:
+            raise ValueError('Expected char %s to be in alphabet size %s' % (c, self.alphabet-size))
+        return o
+
+    def encode_single(self, inpt):
+        return list(map(self.encode_char, inpt))
+
+    def decode_single(self, outpt):
+        return ''.join(map(self.decode_num, outpt))
+
+    def decode_num(self, num):
+        return chr(num+ord('a'))
+
+    def empty(self):
+        return ''
+
 encodings = {
     'basic': BasicEncoding,
-    'string': StringEncoding
+    'string': StringEncoding,
+    'string-alphabet': StringAlphabetEncoding
 }
 
 class LSTMModelBase(object):
@@ -300,8 +327,8 @@ class LSTMModelBase(object):
         logging.info('Using summaries dir %s' % summaries_dir)
         summary_writer = tf.summary.FileWriter(summaries_dir)
 
-        batch_size = 10
-        max_single_len = 3
+        batch_size = 1
+        max_single_len = None
 
         inputs = self.encode_iter(inputs)
 
@@ -312,7 +339,7 @@ class LSTMModelBase(object):
         for i, batch in enumerate(batches):
             summary, _, new_states = self.run_batch_with_state([self.summary, self.optimize], batch, curr_states)
             summary_writer.add_summary(summary, i)
-            if i % 100 == 0:
+            if i % 10 == 0:
                 loss_max, loss_mean, loss_min = self.run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
                 logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                 #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
@@ -361,15 +388,18 @@ class LSTMModelBase(object):
         for item, loss, probs in zip(lst_dec + [self.alphabet_size], losses, probs_list):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
-class LSTMModel(LSTMModelBase):
-    def __init__(self, name, alphabet_size):
-        super(LSTMModel, self).__init__(name)
-        self.init_from_encoding('basic', alphabet_size)
+class LSTMModelEncoding(LSTMModelBase):
+    def __init__(self, name, encoding_name, *args):
+        super(LSTMModelEncoding, self).__init__(name)
+        self.init_from_encoding(encoding_name, *args)
 
-class LSTMModelString(LSTMModelBase):
+class LSTMModel(LSTMModelEncoding):
+    def __init__(self, name, alphabet_size):
+        super(LSTMModel, self).__init__(name, 'basic', alphabet_size)
+
+class LSTMModelString(LSTMModelEncoding):
     def __init__(self, name):
-        super(LSTMModelString, self).__init__(name)
-        self.init_from_encoding('string')
+        super(LSTMModelString, self).__init__(name, 'string')
 
 class LSTMModelFile(LSTMModelBase):
     def __init__(self, name):
