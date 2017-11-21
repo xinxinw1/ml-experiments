@@ -4,12 +4,72 @@ from datetime import datetime
 import uuid
 import os
 import json
+import pickle
+from abc import ABC, abstractmethod
 
 import my_logging as logging
 
 import config
 
 import tools
+
+class Encoding(ABC):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def encode_single(self, inpt):
+        pass
+
+    @abstractmethod
+    def decode_single(self, outpt):
+        pass
+
+    @abstractmethod
+    def decode_num(self, num):
+        pass
+
+    @abstractmethod
+    def empty(self):
+        pass
+
+class BasicEncoding(Encoding):
+    def __init__(self, alphabet_size):
+        self.alphabet_size = alphabet_size
+
+    def encode_single(self, inpt):
+        return inpt
+
+    def decode_single(self, outpt):
+        return outpt
+
+    def decode_num(self, num):
+        return num
+
+    def empty(self):
+        return []
+
+class StringEncoding(Encoding):
+    def __init__(self):
+        self.alphabet_size = 256
+
+    def encode_single(self, inpt):
+        return tools.string_to_bytes(inpt)
+
+    def decode_single(self, outpt):
+        return tools.bytes_to_string(outpt)
+
+    def decode_num(self, num):
+        return chr(num)
+
+    def empty(self):
+        return ''
+
+encodings = {
+    'basic': BasicEncoding,
+    'string': StringEncoding
+}
 
 class LSTMModelBase(object):
     def __init__(self, name):
@@ -28,11 +88,19 @@ class LSTMModelBase(object):
             self.sess = None
             logging.info('Closed session %s' % self.uuid)
 
-    def init_from_scratch(self, alphabet_size):
+    def setup_encoding(self, encoding_name, *args):
+        self.encoding_name = encoding_name
+        self.encoding = encodings[encoding_name](*args)
+        self.alphabet_size = self.encoding.alphabet_size
+
+    def init_from_encoding(self, encoding_name, *args):
+        self.setup_encoding(encoding_name, *args)
+        self.init_after_encoding()
+
+    def init_after_encoding(self):
         self.close_sess_if_open()
 
-        self.alphabet_size = alphabet_size
-        self.effective_alphabet_size = alphabet_size + 1
+        self.effective_alphabet_size = self.alphabet_size + 2
         self.graph = tf.Graph()
 
         with self.graph.as_default():
@@ -102,14 +170,17 @@ class LSTMModelBase(object):
             self.sess = tf.Session(graph=self.graph)
             self.sess.run(tf.global_variables_initializer())
 
+
     def init_from_file(self):
         self.close_sess_if_open()
 
         file_path = os.path.join(config.SAVED_MODELS_DIR, self.name, config.TAG)
-        extra_file_path = file_path + '.json'
-        with open(extra_file_path, 'r') as f:
-            extra = json.load(f)
+        extra_file_path = file_path + '.pkl'
+        with open(extra_file_path, 'rb') as f:
+            extra = pickle.load(f)
 
+        self.encoding_name = extra['encoding_name']
+        self.encoding = extra['encoding']
         self.alphabet_size = extra['alphabet_size']
         self.effective_alphabet_size = extra['effective_alphabet_size']
         self.state_sizes = extra['state_sizes']
@@ -152,13 +223,15 @@ class LSTMModelBase(object):
         self.saver.save(self.sess, file_path)
 
         extra = {
+            'encoding_name': self.encoding_name,
+            'encoding': self.encoding,
             'alphabet_size': self.alphabet_size,
             'effective_alphabet_size': self.effective_alphabet_size,
             'state_sizes': self.state_sizes
         }
-        extra_file_path = file_path + '.json'
-        with open(extra_file_path, 'w') as f:
-            json.dump(extra, f)
+        extra_file_path = file_path + '.pkl'
+        with open(extra_file_path, 'wb') as f:
+            pickle.dump(extra, f)
 
         logging.info('Saved model to file %s' % file_path)
 
@@ -177,7 +250,7 @@ class LSTMModelBase(object):
             A list of outputs tensor_outputs
         """
         inputs, labels = batch
-        print(inputs, labels)
+        # print(inputs, labels)
         if curr_states is None:
             batch_size = inputs.shape[0]
             def make_current_state(state_size):
@@ -193,7 +266,32 @@ class LSTMModelBase(object):
                 token_item=self.alphabet_size, pad_item=self.alphabet_size)
         return self.run_batch(tensors, next(batches))
 
+    def encode_single(self, inpt):
+        return self.encoding.encode_single(inpt)
+
+    def decode_single(self, outpt):
+        return self.encoding.decode_single(outpt)
+
+    def decode_num(self, num):
+        return self.encoding.decode_num(num)
+
+    def empty(self):
+        return self.encoding.empty()
+
+    def encode_iter(self, inputs):
+        return map(self.encode_single, inputs)
+
+    def decode_if_ok(self, num):
+        return self.decode_num(num) if num < self.alphabet_size else num
+
+    def decode_single_to_list(self, outpt):
+        return list(map(self.decode_if_ok, outpt))
+
     def train(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of python lists
+        """
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
         tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
@@ -204,6 +302,8 @@ class LSTMModelBase(object):
 
         batch_size = 10
         max_single_len = 3
+
+        inputs = self.encode_iter(inputs)
 
         batches = tools.make_batches(inputs, batch_size, max_single_len,
                 token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
@@ -220,29 +320,56 @@ class LSTMModelBase(object):
             curr_states = new_states
         logging.info('Saved summaries to %s' % summaries_dir)
 
-    def sample(self, starting=[], max_num=1000):
+    def make_probs_dec(self, probs):
+        probs_dec = [(self.decode_if_ok(i), prob) for i, prob in enumerate(probs)]
+        probs_dec.sort(key=lambda s: s[1], reverse=True)
+        probs_dec = probs_dec[:7]
+        return probs_dec
+
+    def sample(self, starting=None, max_num=1000):
+        if starting is None:
+            starting = self.empty()
+        starting = self.encode_single(starting)
+        # starting: A python iterable of numbers
         curr = list(starting)
+        curr_output = list(curr)
         for i in range(max_num):
             probs_batch = self.run_single(self.probabilities, curr)
             probs = probs_batch[0][-1]
             next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
-            logging.info('Step %s: curr: %s next_int: %s probs: %s' % (i, curr, next_int, probs))
+            curr_dec = self.decode_single_to_list(curr)
+            next_dec = self.decode_if_ok(next_int)
+            probs_dec = self.make_probs_dec(probs)
+            logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
             if next_int == self.alphabet_size:
                 break
+            if next_int < self.alphabet_size:
+                curr_output.append(next_int)
             curr.append(next_int)
-        return curr
+        return self.decode_single(curr)
 
-    def analyze(self, lst):
+    def analyze(self, inpt):
+        """
+        Args:
+            inpt: A python list
+        """
+        lst = self.encode_single(inpt)
         losses_batch, probs_batch = self.run_single([self.losses, self.probabilities], lst)
         losses = losses_batch[0].tolist()
-        probs_list = probs_batch[0].tolist()
-        for item, loss, probs in zip(lst + [self.alphabet_size], losses, probs_list):
-            print('%-3s %-11.8f %s' % (item, loss, probs))
+        probs_list = map(self.make_probs_dec, probs_batch[0])
+        lst_dec = self.decode_single_to_list(lst)
+        for item, loss, probs in zip(lst_dec + [self.alphabet_size], losses, probs_list):
+            print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
 class LSTMModel(LSTMModelBase):
     def __init__(self, name, alphabet_size):
         super(LSTMModel, self).__init__(name)
-        self.init_from_scratch(alphabet_size)
+        self.init_from_encoding('basic', alphabet_size)
+
+class LSTMModelString(LSTMModelBase):
+    def __init__(self, name):
+        super(LSTMModelString, self).__init__(name)
+        self.init_from_encoding('string')
 
 class LSTMModelFile(LSTMModelBase):
     def __init__(self, name):
