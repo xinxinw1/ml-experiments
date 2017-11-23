@@ -19,10 +19,11 @@ class Encoding(ABC):
         pass
 
     @abstractmethod
-    def encode_single(self, inpt):
-        """
-        Must return a list, not an iterable
-        """
+    def encode_single_for_training(self, inpt):
+        pass
+
+    @abstractmethod
+    def encode_single_for_analysis(self, inpt):
         pass
 
     @abstractmethod
@@ -51,6 +52,12 @@ class BasicEncoding(Encoding):
 
     def encode_single(self, inpt):
         return inpt
+
+    def encode_single_for_training(self, inpt):
+        return self.encode_single(inpt)
+
+    def encode_single_for_analysis(self, inpt):
+        return self.encode_single(inpt)
 
     def decode_single(self, outpt):
         return outpt
@@ -331,9 +338,6 @@ class LSTMModelBase(object):
             labels = [inpt + [self.alphabet_size]]
         return self._run(tensors, inputs, labels)
 
-    def _encode_single(self, inpt):
-        return self.encoding.encode_single(inpt)
-
     def _decode_single(self, outpt):
         return self.encoding.decode_single(outpt)
 
@@ -342,9 +346,6 @@ class LSTMModelBase(object):
 
     def _empty(self):
         return self.encoding.empty()
-
-    def _encode_iter(self, inputs):
-        return map(self._encode_single, inputs)
 
     def _decode_if_ok(self, num):
         return self._decode_num(num) if num < self.alphabet_size else num
@@ -373,7 +374,7 @@ class LSTMModelBase(object):
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
-        inputs = self._encode_iter(inputs)
+        inputs = map(self.encoding.encode_single_for_training, inputs)
         batches = self._make_batches(inputs)
 
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
@@ -409,7 +410,7 @@ class LSTMModelBase(object):
         """
         if starting is None:
             starting = self._empty()
-        starting = self._encode_single(starting)
+        starting = self.encoding.encode_single_for_analysis(starting)
         # starting: A python iterable of numbers
         curr = list(starting)
         if self.encoding.use_long and not curr:
@@ -435,7 +436,7 @@ class LSTMModelBase(object):
         Args:
             starting: A thing that encodes to a python iterable of numbers
         """
-        lst = list(self._encode_single(inpt))
+        lst = list(self.encoding.encode_single_for_analysis(inpt))
         labels_batch, losses_batch, probs_batch = self._run_single_for_analysis(
                 [self.labels, self.losses, self.probabilities], lst)
         labels = labels_batch[0].tolist()
