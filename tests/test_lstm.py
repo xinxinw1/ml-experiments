@@ -1,6 +1,9 @@
 import pytest
 
+import os
+
 from models import lstm
+import config
 
 def test_simple():
     model = lstm.LSTMModel('test-simple', 2)
@@ -62,6 +65,14 @@ def test_simple_string_long():
     model.sample('a')
     model.analyze('ab')
     model.train(['ab' * 50])
+    model.sample('a')
+    model.analyze('ab')
+    model.save_to_file()
+
+def test_file():
+    model = lstm.LSTMModelFileEncoding('test-file')
+    with open(os.path.join(config.DATA_DIR, 'test.txt'), 'r') as f:
+        model.train([f])
     model.sample('a')
     model.analyze('ab')
     model.save_to_file()

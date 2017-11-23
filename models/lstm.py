@@ -20,10 +20,18 @@ class Encoding(ABC):
 
     @abstractmethod
     def encode_single_for_training(self, inpt):
+        """
+        Returns:
+            encoded: A python iterable (if long) or list (if short) of numbers
+        """
         pass
 
     @abstractmethod
     def encode_single_for_analysis(self, inpt):
+        """
+        Returns:
+            encoded: A python iterable (if long) or list (if short) of numbers
+        """
         pass
 
     @abstractmethod
@@ -107,10 +115,22 @@ class StringAlphabetEncoding(BasicEncoding):
     def empty(self):
         return ''
 
+class FileEncoding(StringEncoding):
+    def __init__(self, max_batch_size=2, max_batch_width=200):
+        super(FileEncoding, self).__init__(True, max_batch_size, max_batch_width)
+
+    def encode_single_for_training(self, inpt):
+        """
+        Args:
+            inpt: A file handle
+        """
+        return tools.file_to_bytes(inpt)
+
 encodings = {
     'basic': BasicEncoding,
     'string': StringEncoding,
-    'string-alphabet': StringAlphabetEncoding
+    'string-alphabet': StringAlphabetEncoding,
+    'file': FileEncoding
 }
 
 class LSTMModelBase(object):
@@ -458,6 +478,10 @@ class LSTMModel(LSTMModelEncoding):
 class LSTMModelString(LSTMModelEncoding):
     def __init__(self, name, use_long=False):
         super(LSTMModelString, self).__init__(name, 'string', use_long)
+
+class LSTMModelFileEncoding(LSTMModelEncoding):
+    def __init__(self, name):
+        super(LSTMModelFileEncoding, self).__init__(name, 'file')
 
 class LSTMModelFile(LSTMModelBase):
     def __init__(self, name):
