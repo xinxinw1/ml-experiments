@@ -38,9 +38,16 @@ class Encoding(ABC):
         pass
 
 class BasicEncoding(Encoding):
-    def __init__(self, alphabet_size, use_long=False):
+    def __init__(self, alphabet_size, use_long=False, max_batch_size=None, max_batch_width=200):
         self.alphabet_size = alphabet_size
         self.use_long = use_long
+        if max_batch_size is None:
+            if use_long:
+                max_batch_size = 2
+            else:
+                max_batch_size = 10
+        self.max_batch_size = max_batch_size
+        self.max_batch_width = max_batch_width
 
     def encode_single(self, inpt):
         return inpt
@@ -54,10 +61,9 @@ class BasicEncoding(Encoding):
     def empty(self):
         return []
 
-class StringEncoding(Encoding):
-    def __init__(self, use_long=False):
-        self.alphabet_size = 256
-        self.use_long = use_long
+class StringEncoding(BasicEncoding):
+    def __init__(self, use_long=False, max_batch_size=None, max_batch_width=200):
+        super(StringEncoding, self).__init__(256, use_long, max_batch_size, max_batch_width)
 
     def encode_single(self, inpt):
         return tools.string_to_bytes(inpt)
@@ -71,10 +77,10 @@ class StringEncoding(Encoding):
     def empty(self):
         return ''
 
-class StringAlphabetEncoding(Encoding):
-    def __init__(self, alphabet_size=26):
-        self.alphabet_size = alphabet_size
+class StringAlphabetEncoding(BasicEncoding):
+    def __init__(self, alphabet_size=26, use_long=False, max_batch_size=None, max_batch_width=200):
         assert alphabet_size <= 26
+        super(StringAlphabetEncoding, self).__init__(alphabet_size, use_long, max_batch_size, max_batch_width)
 
     def encode_char(self, c):
         o = ord(c) - ord('a')
@@ -121,7 +127,6 @@ class LSTMModelBase(object):
         self.encoding_name = encoding_name
         self.encoding = encodings[encoding_name](*args, **kwargs)
         self.alphabet_size = self.encoding.alphabet_size
-        self.use_long = self.encoding.use_long
 
     def init_from_encoding(self, encoding_name, *args, **kwargs):
         self._setup_encoding(encoding_name, *args, **kwargs)
@@ -215,7 +220,6 @@ class LSTMModelBase(object):
         self.state_sizes = extra['state_sizes']
 
         self.alphabet_size = self.encoding.alphabet_size
-        self.use_long = self.encoding.use_long
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -306,9 +310,22 @@ class LSTMModelBase(object):
         Args:
             inpt: A python list of numbers
         """
-        if self.use_long:
+        if self.encoding.use_long:
             inputs = [inpt]
             labels = [inpt[1:] + [self.alphabet_size]]
+        else:
+            inputs = [[self.alphabet_size] + inpt]
+            labels = [inpt + [self.alphabet_size]]
+        return self._run(tensors, inputs, labels)
+
+    def _run_single_for_analysis(self, tensors, inpt):
+        """
+        Args:
+            inpt: A python list of numbers
+        """
+        if self.encoding.use_long:
+            inputs = [inpt[:-1]]
+            labels = [inpt[1:]]
         else:
             inputs = [[self.alphabet_size] + inpt]
             labels = [inpt + [self.alphabet_size]]
@@ -340,9 +357,9 @@ class LSTMModelBase(object):
         Args:
             inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
         """
-        max_batch_size = 10
-        max_batch_width = 200
-        if self.use_long:
+        max_batch_size = self.encoding.max_batch_size
+        max_batch_width = self.encoding.max_batch_width
+        if self.encoding.use_long:
             inputs = tools.flat(inputs)
             batches = tools.make_batches_long(inputs, max_batch_size, max_batch_width,
                     pad_item=self.alphabet_size+1)
@@ -395,7 +412,7 @@ class LSTMModelBase(object):
         starting = self._encode_single(starting)
         # starting: A python iterable of numbers
         curr = list(starting)
-        if self.use_long and not curr:
+        if self.encoding.use_long and not curr:
             raise ValueError('Starting value must be non-empty in long mode.')
         curr_output = list(curr)
         for i in range(max_num):
@@ -419,7 +436,8 @@ class LSTMModelBase(object):
             starting: A thing that encodes to a python iterable of numbers
         """
         lst = list(self._encode_single(inpt))
-        labels_batch, losses_batch, probs_batch = self._run_single([self.labels, self.losses, self.probabilities], lst)
+        labels_batch, losses_batch, probs_batch = self._run_single_for_analysis(
+                [self.labels, self.losses, self.probabilities], lst)
         labels = labels_batch[0].tolist()
         losses = losses_batch[0].tolist()
         probs_list = map(self._make_probs_dec, probs_batch[0])
