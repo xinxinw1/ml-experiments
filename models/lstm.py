@@ -229,8 +229,12 @@ class LSTMModelBase(object):
 
             self.summary = tf.identity(tf.summary.merge_all(), name='summary')
 
+            self.glob_var_init = tf.global_variables_initializer()
+
+            self.graph.finalize()
+
             self.sess = tf.Session(graph=self.graph)
-            self.sess.run(tf.global_variables_initializer())
+            self.sess.run(self.glob_var_init)
 
 
     def init_from_file(self):
@@ -274,6 +278,8 @@ class LSTMModelBase(object):
                     for i in range(len(self.state_sizes)))
 
             self.summary = self.graph.get_tensor_by_name('summary:0')
+
+            self.graph.finalize()
 
         logging.info('Loaded from file %s' % file_path)
 
@@ -406,15 +412,18 @@ class LSTMModelBase(object):
         summary_writer = tf.summary.FileWriter(summaries_dir)
 
         curr_states = None
-        for i, batch in enumerate(batches):
-            summary, _, new_states = self._run_batch_with_state([self.summary, self.optimize], batch, curr_states)
-            summary_writer.add_summary(summary, i)
-            if i % 10 == 0:
-                loss_max, loss_mean, loss_min = self._run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
-                logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
-                #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
-                #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
-            # curr_states = new_states
+        try:
+            for i, batch in enumerate(batches):
+                summary, _, new_states = self._run_batch_with_state([self.summary, self.optimize], batch, curr_states)
+                summary_writer.add_summary(summary, i)
+                if i % 10 == 0:
+                    loss_max, loss_mean, loss_min = self._run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                    logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
+                    #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
+                    #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
+                # curr_states = new_states
+        except KeyboardInterrupt:
+            logging.info('Cancelling training...')
         logging.info('Saved summaries to %s' % summaries_dir)
 
     def _make_probs_dec(self, probs):
@@ -436,19 +445,22 @@ class LSTMModelBase(object):
         if self.encoding.use_long and not curr:
             raise ValueError('Starting value must be non-empty in long mode.')
         curr_output = list(curr)
-        for i in range(max_num):
-            probs_batch = self._run_single(self.probabilities, curr)
-            probs = probs_batch[0][-1]
-            next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
-            curr_dec = self._decode_single_to_list(curr[-5:])
-            next_dec = self._decode_if_ok(next_int)
-            probs_dec = self._make_probs_dec(probs)
-            logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
-            if next_int == self.alphabet_size:
-                break
-            if next_int < self.alphabet_size:
-                curr_output.append(next_int)
-            curr.append(next_int)
+        try:
+            for i in range(max_num):
+                probs_batch = self._run_single(self.probabilities, curr)
+                probs = probs_batch[0][-1]
+                next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
+                curr_dec = self._decode_single_to_list(curr[-5:])
+                next_dec = self._decode_if_ok(next_int)
+                probs_dec = self._make_probs_dec(probs)
+                logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
+                if next_int == self.alphabet_size:
+                    break
+                if next_int < self.alphabet_size:
+                    curr_output.append(next_int)
+                curr.append(next_int)
+        except KeyboardInterrupt:
+            logging.info('Cancelling sample...')
         return self._decode_single(curr_output)
 
     def analyze(self, inpt):
