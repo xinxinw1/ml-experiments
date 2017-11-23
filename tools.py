@@ -115,6 +115,47 @@ def make_batches_long(inputs, max_batch_size, max_batch_width, pad_item):
     labels_batches_it = make_batch_half_with_it_of_nums(labels_it, max_batch_size, max_batch_width, pad_item)
     return zip(inputs_batches_it, labels_batches_it)
 
+class BatchMaker(object):
+    def __init__(self, max_batch_size, max_batch_width, pad_item):
+        self.inputs_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
+        self.labels_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
+        self.max_batch_size = max_batch_size
+        self.max_batch_width = max_batch_width
+        self.pad_item = pad_item
+
+    def make_batches_long(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of numbers
+        Returns:
+            batches: A python iterator of batches where each batch is a
+                tuple (inputs batch, labels batch) and each batch part
+                is a python list of lists of numbers
+        """
+        inputs_it, labels_it = itertools.tee(inputs)
+        inputs_it = drop_last(inputs_it)
+        labels_it = itertools.islice(labels_it, 1, None)
+        i = 0
+        for input_num, label_num in zip(inputs_it, labels_it):
+            batch_index = i // self.max_batch_width
+            in_batch_index = i % self.max_batch_width
+            self.inputs_array[batch_index, in_batch_index] = input_num
+            self.labels_array[batch_index, in_batch_index] = label_num
+            i += 1
+            if i == self.max_batch_size * self.max_batch_width:
+                yield (self.inputs_array, self.labels_array)
+                i = 0
+        if i != 0:
+            batch_index = i // self.max_batch_width
+            in_batch_index = i % self.max_batch_width
+            if in_batch_index != 0:
+                for in_batch_index in range(in_batch_index, self.max_batch_width):
+                    self.inputs_array[batch_index, in_batch_index] = self.pad_item
+                    self.labels_array[batch_index, in_batch_index] = self.pad_item
+                batch_index += 1
+                in_batch_index = 0
+            yield (self.inputs_array[:batch_index], self.labels_array[:batch_index])
+
 def make_batches(inputs, batch_size, max_single_len, token_item, pad_item):
     """
     Args:

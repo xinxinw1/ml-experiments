@@ -157,8 +157,12 @@ class LSTMModelBase(object):
 
     def _setup_encoding(self, encoding_name, *args, **kwargs):
         self.encoding_name = encoding_name
+        self.encoding_args = args
+        self.encoding_kwargs = kwargs
         self.encoding = encodings[encoding_name](*args, **kwargs)
         self.alphabet_size = self.encoding.alphabet_size
+        self.effective_alphabet_size = self.alphabet_size + 2
+        self.batch_maker = tools.BatchMaker(self.encoding.max_batch_size, self.encoding.max_batch_width, self.alphabet_size+1)
 
     def init_from_encoding(self, encoding_name, *args, **kwargs):
         logging.info('Initializing from encoding...')
@@ -168,7 +172,6 @@ class LSTMModelBase(object):
     def _init_after_encoding(self):
         self._close_sess_if_open()
 
-        self.effective_alphabet_size = self.alphabet_size + 2
         self.graph = tf.Graph()
 
         with self.graph.as_default():
@@ -253,12 +256,12 @@ class LSTMModelBase(object):
         with open(extra_file_path, 'rb') as f:
             extra = pickle.load(f)
 
-        self.encoding_name = extra['encoding_name']
-        self.encoding = extra['encoding']
-        self.effective_alphabet_size = extra['effective_alphabet_size']
-        self.state_sizes = extra['state_sizes']
+        encoding_name = extra['encoding_name']
+        encoding_args = extra['encoding_args']
+        encoding_kwargs = extra['encoding_kwargs']
+        self._setup_encoding(encoding_name, *encoding_args, **encoding_kwargs)
 
-        self.alphabet_size = self.encoding.alphabet_size
+        self.state_sizes = extra['state_sizes']
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -301,8 +304,8 @@ class LSTMModelBase(object):
 
         extra = {
             'encoding_name': self.encoding_name,
-            'encoding': self.encoding,
-            'effective_alphabet_size': self.effective_alphabet_size,
+            'encoding_args': self.encoding_args,
+            'encoding_kwargs': self.encoding_kwargs,
             'state_sizes': self.state_sizes
         }
         extra_file_path = file_path + '.pkl'
@@ -331,7 +334,7 @@ class LSTMModelBase(object):
     def _run(self, tensors, inputs, labels=None, curr_states=None):
         # print(inputs, labels)
 
-        if not inputs or not inputs[0] or (labels is not None and (not labels or not labels[0])):
+        if len(inputs) == 0 or len(inputs[0]) == 0 or (labels is not None and (len(labels) == 0 or len(labels[0]) == 0)):
             raise ValueError('Inputs and labels cannot be empty.')
 
         # if curr_states is None:
@@ -396,13 +399,11 @@ class LSTMModelBase(object):
         Args:
             inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
         """
-        max_batch_size = self.encoding.max_batch_size
-        max_batch_width = self.encoding.max_batch_width
         if self.encoding.use_long:
             inputs = tools.flat(inputs)
-            batches = tools.make_batches_long(inputs, max_batch_size, max_batch_width,
-                    pad_item=self.alphabet_size+1)
+            batches = self.batch_maker.make_batches_long(inputs)
         else:
+            max_batch_size = self.encoding.max_batch_size
             batches = tools.make_batches_with_start_end(inputs, max_batch_size,
                     token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
         return batches

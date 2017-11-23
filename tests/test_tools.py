@@ -4,9 +4,12 @@ import tools
 import numpy as np
 import itertools
 
-def assert_iter_equals(it, exp):
+def assert_equals(a, b):
+    assert a == b
+
+def assert_iter_equals(it, exp, assert_fn=assert_equals):
     for item in exp:
-        assert next(it) == item
+        assert_fn(next(it), item)
     with pytest.raises(StopIteration):
         next(it)
 
@@ -100,6 +103,37 @@ def test_make_batches_long_infinite():
         ([[2, 3, 4], [5, 1, 2]], [[3, 4, 5], [1, 2, 3]])
     ]
     assert_iter_equals(batches, expected)
+
+def test_BatchMaker_long():
+    def assert_fn(a, b):
+        for inner_a, inner_b in zip(a, b):
+            assert (inner_a == inner_b).all()
+
+    maker = tools.BatchMaker(2, 3, 0)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    batches = maker.make_batches_long(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9]], [[8, 9, 10]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    batches = maker.make_batches_long(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9], [10, 0, 0]], [[8, 9, 10], [11, 0, 0]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    batches = maker.make_batches_long(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9], [10, 11, 12]], [[8, 9, 10], [11, 12, 13]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
 
 @pytest.mark.parametrize('use_iter', [
     (False), (True)])
