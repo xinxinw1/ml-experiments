@@ -12,29 +12,10 @@ _handler = _logging.StreamHandler()
 _handler.setFormatter(_logging.Formatter('[%(levelname)s] %(asctime)-15s [%(filename)s:%(lineno)d] %(message)s', None))
 _logger.addHandler(_handler)
 
-def log(level, msg, *args, **kwargs):
-  _logger.log(level, msg, *args, **kwargs)
-
-
-def debug(msg, *args, **kwargs):
-  _logger.debug(msg, *args, **kwargs)
-
-
-def error(msg, *args, **kwargs):
-  _logger.error(msg, *args, **kwargs)
-
-
-def fatal(msg, *args, **kwargs):
-  _logger.fatal(msg, *args, **kwargs)
-
-
-def info(msg, *args, **kwargs):
-  _logger.info(msg, *args, **kwargs)
-
-
-def warn(msg, *args, **kwargs):
-  _logger.warn(msg, *args, **kwargs)
-
-
-def warning(msg, *args, **kwargs):
-  _logger.warning(msg, *args, **kwargs)
+log = _logger.log
+debug = _logger.debug
+error = _logger.error
+fatal = _logger.fatal
+info = _logger.info
+warn = _logger.warn
+warning = _logger.warning
