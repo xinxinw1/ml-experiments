@@ -9,7 +9,7 @@ from logging import WARN
 _logger = _logging.getLogger('xin-xin')
 _logger.setLevel(INFO)
 _handler = _logging.StreamHandler()
-_handler.setFormatter(_logging.Formatter(_logging.BASIC_FORMAT, None))
+_handler.setFormatter(_logging.Formatter('[%(levelname)s] %(asctime)-15s [%(filename)s:%(lineno)d] %(message)s', None))
 _logger.addHandler(_handler)
 
 def log(level, msg, *args, **kwargs):
