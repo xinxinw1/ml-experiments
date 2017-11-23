@@ -7,7 +7,7 @@ from models import lstm
 import os
 import itertools
 
-model = lstm.LSTMModelString('shakespeare')
+model = lstm.LSTMModelFile('shakespeare')
 with open(os.path.join(config.DATA_DIR, 'shakespeare_input.txt'), 'r') as f:
-    model.train(itertools.islice(f, 1000))
+    model.train([f])
 model.save_to_file()
