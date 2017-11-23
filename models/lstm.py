@@ -1,4 +1,10 @@
+import my_logging as logging
+
+logging.info('Importing tensorflow...')
 import tensorflow as tf
+logging.info('Imported tensorflow.')
+tf.get_default_graph().finalize()
+
 import numpy as np
 from datetime import datetime
 import uuid
@@ -7,7 +13,6 @@ import json
 import pickle
 from abc import ABC, abstractmethod
 
-import my_logging as logging
 
 import config
 
@@ -156,6 +161,7 @@ class LSTMModelBase(object):
         self.alphabet_size = self.encoding.alphabet_size
 
     def init_from_encoding(self, encoding_name, *args, **kwargs):
+        logging.info('Initializing from encoding...')
         self._setup_encoding(encoding_name, *args, **kwargs)
         self._init_after_encoding()
 
@@ -179,28 +185,28 @@ class LSTMModelBase(object):
 
             self.state_sizes = [2*self.effective_alphabet_size] * 1
 
-            def make_init_state(i, state_size):
-                return tf.placeholder(tf.float32, [2, None, state_size], name='init_state_' + str(i))
+            # def make_init_state(i, state_size):
+            #     return tf.placeholder(tf.float32, [2, None, state_size], name='init_state_' + str(i))
 
-            def make_lstm_state_tuple(init_state):
-                c, h = tf.unstack(init_state)
-                return tf.contrib.rnn.LSTMStateTuple(c, h)
+            # def make_lstm_state_tuple(init_state):
+            #     c, h = tf.unstack(init_state)
+            #     return tf.contrib.rnn.LSTMStateTuple(c, h)
 
-            self.init_states = tuple(make_init_state(i, state_size) for i, state_size in enumerate(self.state_sizes))
-            rnn_init_state = tuple(make_lstm_state_tuple(init_state) for init_state in self.init_states)
+            # self.init_states = tuple(make_init_state(i, state_size) for i, state_size in enumerate(self.state_sizes))
+            # rnn_init_state = tuple(make_lstm_state_tuple(init_state) for init_state in self.init_states)
 
             lstm_cells = list(map(tf.contrib.rnn.BasicLSTMCell, self.state_sizes))
             lstm = tf.contrib.rnn.MultiRNNCell(lstm_cells)
-            rnn_output, rnn_states = tf.nn.dynamic_rnn(lstm, self.inputs_one_hot, initial_state=rnn_init_state, dtype=tf.float32)
+            rnn_output, rnn_states = tf.nn.dynamic_rnn(lstm, self.inputs_one_hot, dtype=tf.float32)
             # rnn_outputs is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
             # state is a list of tensors with dim batch_size x state_size
 
-            def make_output_state(i, state_tuple):
-                c = state_tuple.c
-                h = state_tuple.h
-                return tf.identity(tf.stack([c, h]), name='output_state_' + str(i))
+            # def make_output_state(i, state_tuple):
+            #     c = state_tuple.c
+            #     h = state_tuple.h
+            #     return tf.identity(tf.stack([c, h]), name='output_state_' + str(i))
 
-            self.output_states = tuple(make_output_state(i, state) for i, state in enumerate(rnn_states))
+            # self.output_states = tuple(make_output_state(i, state) for i, state in enumerate(rnn_states))
 
             logits = tf.contrib.layers.fully_connected(rnn_output, self.effective_alphabet_size, activation_fn=None)
             self.logits = tf.identity(logits, name='logits')
@@ -237,6 +243,7 @@ class LSTMModelBase(object):
             self.sess = tf.Session(graph=self.graph)
             self.sess.run(self.glob_var_init)
 
+        logging.info('Initialized from encoding.')
 
     def init_from_file(self):
         self._close_sess_if_open()
@@ -273,10 +280,10 @@ class LSTMModelBase(object):
             self.optimize = self.graph.get_operation_by_name('optimize')
             self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
 
-            self.init_states = tuple(self.graph.get_tensor_by_name('init_state_' + str(i) + ':0')
-                    for i in range(len(self.state_sizes)))
-            self.output_states = tuple(self.graph.get_tensor_by_name('output_state_' + str(i) + ':0')
-                    for i in range(len(self.state_sizes)))
+            # self.init_states = tuple(self.graph.get_tensor_by_name('init_state_' + str(i) + ':0')
+            #         for i in range(len(self.state_sizes)))
+            # self.output_states = tuple(self.graph.get_tensor_by_name('output_state_' + str(i) + ':0')
+            #         for i in range(len(self.state_sizes)))
 
             self.summary = self.graph.get_tensor_by_name('summary:0')
 
@@ -304,13 +311,13 @@ class LSTMModelBase(object):
 
         logging.info('Saved model to file %s' % file_path)
 
-    def _run_batch_with_state(self, tensors, batch, curr_states=None):
-        """
-        batch: tuple (inputs_batch, labels_batch)
-        Returns:
-            A list of outputs [new_states] + tensor_outputs
-        """
-        return self._run_batch(tensors + [self.output_states], batch, curr_states)
+    # def _run_batch_with_state(self, tensors, batch, curr_states=None):
+    #     """
+    #     batch: tuple (inputs_batch, labels_batch)
+    #     Returns:
+    #         A list of outputs [new_states] + tensor_outputs
+    #     """
+    #     return self._run_batch(tensors + [self.output_states], batch, curr_states)
 
     def _run_batch(self, tensors, batch, curr_states=None):
         """
@@ -327,17 +334,21 @@ class LSTMModelBase(object):
         if not inputs or not inputs[0] or (labels is not None and (not labels or not labels[0])):
             raise ValueError('Inputs and labels cannot be empty.')
 
-        if curr_states is None:
-            batch_size = len(inputs)
-            def make_current_state(state_size):
-                return np.zeros((2, batch_size, state_size))
-            curr_states = tuple(map(make_current_state, self.state_sizes))
+        # if curr_states is None:
+        #     batch_size = len(inputs)
+        #     def make_current_state(state_size):
+        #         return np.zeros((2, batch_size, state_size))
+        #     curr_states = tuple(map(make_current_state, self.state_sizes))
 
-        feed_dict = {self.inputs: inputs, self.init_states: curr_states}
+        feed_dict = {self.inputs: inputs}
         if labels is not None:
             feed_dict[self.labels] = labels
 
-        return self.sess.run(tensors, feed_dict=feed_dict)
+        with self.graph.as_default():
+            # logging.info('Start run...')
+            results = self.sess.run(tensors, feed_dict=feed_dict)
+            # logging.info('End run.')
+            return results
 
     def _run_single(self, tensors, inpt):
         """
@@ -415,10 +426,12 @@ class LSTMModelBase(object):
         curr_states = None
         try:
             for i, batch in enumerate(batches):
-                summary, _, new_states = self._run_batch_with_state([self.summary, self.optimize], batch, curr_states)
-                summary_writer.add_summary(summary, i)
-                if i % 10 == 0:
-                    loss_max, loss_mean, loss_min = self._run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                if i % 10 != 0:
+                    _ = self._run_batch([self.optimize], batch, curr_states)
+                else:
+                    _, summary, loss_max, loss_mean, loss_min = self._run_batch(
+                            [self.optimize, self.summary, self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                    summary_writer.add_summary(summary, i)
                     logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                     #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                     #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))

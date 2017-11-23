@@ -6,4 +6,4 @@ DATA_DIR = os.path.join(ROOT_DIR, 'data')
 SAVED_SUMMARIES_DIR = os.path.join(ROOT_DIR, 'saved_summaries')
 SAVED_MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
 
-TAG = 'baseline'
+TAG = 'baseline-native-tf'
