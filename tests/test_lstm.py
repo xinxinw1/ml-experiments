@@ -13,7 +13,7 @@ def test_simple():
     model.save_to_file()
     model.sample([1])
 
-    model = lstm.LSTMModelFile('test-simple')
+    model = lstm.LSTMModelFromFile('test-simple')
     model.sample()
     model.analyze([1, 0])
     model.train([[1, 0]] * 1000)
@@ -29,7 +29,7 @@ def test_simple_string():
     model.save_to_file()
     model.sample('a')
 
-    model = lstm.LSTMModelFile('test-simple-string')
+    model = lstm.LSTMModelFromFile('test-simple-string')
     model.sample()
     model.analyze('ab')
     model.train(['ab'] * 50)
@@ -45,7 +45,7 @@ def test_simple_long():
     model.save_to_file()
     model.sample([1])
 
-    model = lstm.LSTMModelFile('test-simple-long')
+    model = lstm.LSTMModelFromFile('test-simple-long')
     model.sample([1])
     model.analyze([1, 0])
     model.train([[1, 0] * 1000])
@@ -61,7 +61,7 @@ def test_simple_string_long():
     model.save_to_file()
     model.sample('a')
 
-    model = lstm.LSTMModelFile('test-simple-string')
+    model = lstm.LSTMModelFromFile('test-simple-string')
     model.sample('a')
     model.analyze('ab')
     model.train(['ab' * 50])
@@ -70,7 +70,7 @@ def test_simple_string_long():
     model.save_to_file()
 
 def test_file():
-    model = lstm.LSTMModelFileEncoding('test-file')
+    model = lstm.LSTMModelFile('test-file')
     with open(os.path.join(config.DATA_DIR, 'test.txt'), 'r') as f:
         model.train([f])
     model.sample('a')

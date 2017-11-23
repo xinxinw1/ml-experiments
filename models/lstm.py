@@ -479,11 +479,11 @@ class LSTMModelString(LSTMModelEncoding):
     def __init__(self, name, use_long=False):
         super(LSTMModelString, self).__init__(name, 'string', use_long)
 
-class LSTMModelFileEncoding(LSTMModelEncoding):
+class LSTMModelFile(LSTMModelEncoding):
     def __init__(self, name):
-        super(LSTMModelFileEncoding, self).__init__(name, 'file')
+        super(LSTMModelFile, self).__init__(name, 'file')
 
-class LSTMModelFile(LSTMModelBase):
+class LSTMModelFromFile(LSTMModelBase):
     def __init__(self, name):
-        super(LSTMModelFile, self).__init__(name)
+        super(LSTMModelFromFile, self).__init__(name)
         self.init_from_file()
