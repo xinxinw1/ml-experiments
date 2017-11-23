@@ -38,8 +38,9 @@ class Encoding(ABC):
         pass
 
 class BasicEncoding(Encoding):
-    def __init__(self, alphabet_size):
+    def __init__(self, alphabet_size, use_long=False):
         self.alphabet_size = alphabet_size
+        self.use_long = use_long
 
     def encode_single(self, inpt):
         return inpt
@@ -54,8 +55,9 @@ class BasicEncoding(Encoding):
         return []
 
 class StringEncoding(Encoding):
-    def __init__(self):
+    def __init__(self, use_long=False):
         self.alphabet_size = 256
+        self.use_long = use_long
 
     def encode_single(self, inpt):
         return tools.string_to_bytes(inpt)
@@ -107,25 +109,26 @@ class LSTMModelBase(object):
 
     def __del__(self):
         logging.info('Running __del__ %s' % self.uuid)
-        self.close_sess_if_open()
+        self._close_sess_if_open()
 
-    def close_sess_if_open(self):
+    def _close_sess_if_open(self):
         if self.sess is not None:
             self.sess.close()
             self.sess = None
             logging.info('Closed session %s' % self.uuid)
 
-    def setup_encoding(self, encoding_name, *args):
+    def _setup_encoding(self, encoding_name, *args, **kwargs):
         self.encoding_name = encoding_name
-        self.encoding = encodings[encoding_name](*args)
+        self.encoding = encodings[encoding_name](*args, **kwargs)
         self.alphabet_size = self.encoding.alphabet_size
+        self.use_long = self.encoding.use_long
 
-    def init_from_encoding(self, encoding_name, *args):
-        self.setup_encoding(encoding_name, *args)
-        self.init_after_encoding()
+    def init_from_encoding(self, encoding_name, *args, **kwargs):
+        self._setup_encoding(encoding_name, *args, **kwargs)
+        self._init_after_encoding()
 
-    def init_after_encoding(self):
-        self.close_sess_if_open()
+    def _init_after_encoding(self):
+        self._close_sess_if_open()
 
         self.effective_alphabet_size = self.alphabet_size + 2
         self.graph = tf.Graph()
@@ -199,7 +202,7 @@ class LSTMModelBase(object):
 
 
     def init_from_file(self):
-        self.close_sess_if_open()
+        self._close_sess_if_open()
 
         file_path = os.path.join(config.SAVED_MODELS_DIR, self.name, config.TAG)
         extra_file_path = file_path + '.pkl'
@@ -208,9 +211,11 @@ class LSTMModelBase(object):
 
         self.encoding_name = extra['encoding_name']
         self.encoding = extra['encoding']
-        self.alphabet_size = extra['alphabet_size']
         self.effective_alphabet_size = extra['effective_alphabet_size']
         self.state_sizes = extra['state_sizes']
+
+        self.alphabet_size = self.encoding.alphabet_size
+        self.use_long = self.encoding.use_long
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -252,7 +257,6 @@ class LSTMModelBase(object):
         extra = {
             'encoding_name': self.encoding_name,
             'encoding': self.encoding,
-            'alphabet_size': self.alphabet_size,
             'effective_alphabet_size': self.effective_alphabet_size,
             'state_sizes': self.state_sizes
         }
@@ -262,63 +266,99 @@ class LSTMModelBase(object):
 
         logging.info('Saved model to file %s' % file_path)
 
-    def run_batch_with_state(self, tensors, batch, curr_states=None):
+    def _run_batch_with_state(self, tensors, batch, curr_states=None):
         """
         batch: tuple (inputs_batch, labels_batch)
         Returns:
             A list of outputs [new_states] + tensor_outputs
         """
-        return self.run_batch(tensors + [self.output_states], batch, curr_states)
+        return self._run_batch(tensors + [self.output_states], batch, curr_states)
 
-    def run_batch(self, tensors, batch, curr_states=None):
+    def _run_batch(self, tensors, batch, curr_states=None):
         """
         batch: tuple (inputs_batch, labels_batch)
         Returns:
             A list of outputs tensor_outputs
         """
         inputs, labels = batch
+        return self._run(tensors, inputs, labels, curr_states)
+
+    def _run(self, tensors, inputs, labels=None, curr_states=None):
         # print(inputs, labels)
+
+        if not inputs or not inputs[0] or (labels is not None and (not labels or not labels[0])):
+            raise ValueError('Inputs and labels cannot be empty.')
+
         if curr_states is None:
-            batch_size = inputs.shape[0]
+            batch_size = len(inputs)
             def make_current_state(state_size):
                 return np.zeros((2, batch_size, state_size))
-
             curr_states = tuple(map(make_current_state, self.state_sizes))
 
-        feed_dict = {self.inputs: inputs, self.labels: labels, self.init_states: curr_states}
+        feed_dict = {self.inputs: inputs, self.init_states: curr_states}
+        if labels is not None:
+            feed_dict[self.labels] = labels
+
         return self.sess.run(tensors, feed_dict=feed_dict)
 
-    def run_single(self, tensors, lst):
-        batches = tools.make_batches([lst], batch_size=1, max_single_len=None,
-                token_item=self.alphabet_size, pad_item=self.alphabet_size)
-        return self.run_batch(tensors, next(batches))
+    def _run_single(self, tensors, inpt):
+        """
+        Args:
+            inpt: A python list of numbers
+        """
+        if self.use_long:
+            inputs = [inpt]
+            labels = [inpt[1:] + [self.alphabet_size]]
+        else:
+            inputs = [[self.alphabet_size] + inpt]
+            labels = [inpt + [self.alphabet_size]]
+        return self._run(tensors, inputs, labels)
 
-    def encode_single(self, inpt):
+    def _encode_single(self, inpt):
         return self.encoding.encode_single(inpt)
 
-    def decode_single(self, outpt):
+    def _decode_single(self, outpt):
         return self.encoding.decode_single(outpt)
 
-    def decode_num(self, num):
+    def _decode_num(self, num):
         return self.encoding.decode_num(num)
 
-    def empty(self):
+    def _empty(self):
         return self.encoding.empty()
 
-    def encode_iter(self, inputs):
-        return map(self.encode_single, inputs)
+    def _encode_iter(self, inputs):
+        return map(self._encode_single, inputs)
 
-    def decode_if_ok(self, num):
-        return self.decode_num(num) if num < self.alphabet_size else num
+    def _decode_if_ok(self, num):
+        return self._decode_num(num) if num < self.alphabet_size else num
 
-    def decode_single_to_list(self, outpt):
-        return list(map(self.decode_if_ok, outpt))
+    def _decode_single_to_list(self, outpt):
+        return list(map(self._decode_if_ok, outpt))
+
+    def _make_batches(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        """
+        max_batch_size = 10
+        max_batch_width = 200
+        if self.use_long:
+            inputs = tools.flat(inputs)
+            batches = tools.make_batches_long(inputs, max_batch_size, max_batch_width,
+                    pad_item=self.alphabet_size+1)
+        else:
+            batches = tools.make_batches_with_start_end(inputs, max_batch_size,
+                    token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
+        return batches
 
     def train(self, inputs):
         """
         Args:
-            inputs: A python iterable of python lists
+            inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
+        inputs = self._encode_iter(inputs)
+        batches = self._make_batches(inputs)
+
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
         tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
@@ -327,79 +367,78 @@ class LSTMModelBase(object):
         logging.info('Using summaries dir %s' % summaries_dir)
         summary_writer = tf.summary.FileWriter(summaries_dir)
 
-        batch_size = 1
-        max_single_len = None
-
-        inputs = self.encode_iter(inputs)
-
-        batches = tools.make_batches(inputs, batch_size, max_single_len,
-                token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
-
         curr_states = None
         for i, batch in enumerate(batches):
-            summary, _, new_states = self.run_batch_with_state([self.summary, self.optimize], batch, curr_states)
+            summary, _, new_states = self._run_batch_with_state([self.summary, self.optimize], batch, curr_states)
             summary_writer.add_summary(summary, i)
             if i % 10 == 0:
-                loss_max, loss_mean, loss_min = self.run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                loss_max, loss_mean, loss_min = self._run_batch([self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
                 logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                 #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                 #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
-            curr_states = new_states
+            # curr_states = new_states
         logging.info('Saved summaries to %s' % summaries_dir)
 
-    def make_probs_dec(self, probs):
-        probs_dec = [(self.decode_if_ok(i), prob) for i, prob in enumerate(probs)]
+    def _make_probs_dec(self, probs):
+        probs_dec = [(self._decode_if_ok(i), prob) for i, prob in enumerate(probs)]
         probs_dec.sort(key=lambda s: s[1], reverse=True)
         probs_dec = probs_dec[:7]
         return probs_dec
 
-    def sample(self, starting=None, max_num=1000):
+    def sample(self, starting=None, max_num=50):
+        """
+        Args:
+            starting: A thing that encodes to a python iterable of numbers
+        """
         if starting is None:
-            starting = self.empty()
-        starting = self.encode_single(starting)
+            starting = self._empty()
+        starting = self._encode_single(starting)
         # starting: A python iterable of numbers
         curr = list(starting)
+        if self.use_long and not curr:
+            raise ValueError('Starting value must be non-empty in long mode.')
         curr_output = list(curr)
         for i in range(max_num):
-            probs_batch = self.run_single(self.probabilities, curr)
+            probs_batch = self._run_single(self.probabilities, curr)
             probs = probs_batch[0][-1]
             next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
-            curr_dec = self.decode_single_to_list(curr)
-            next_dec = self.decode_if_ok(next_int)
-            probs_dec = self.make_probs_dec(probs)
+            curr_dec = self._decode_single_to_list(curr[-5:])
+            next_dec = self._decode_if_ok(next_int)
+            probs_dec = self._make_probs_dec(probs)
             logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
             if next_int == self.alphabet_size:
                 break
             if next_int < self.alphabet_size:
                 curr_output.append(next_int)
             curr.append(next_int)
-        return self.decode_single(curr)
+        return self._decode_single(curr_output)
 
     def analyze(self, inpt):
         """
         Args:
-            inpt: A python list
+            starting: A thing that encodes to a python iterable of numbers
         """
-        lst = self.encode_single(inpt)
-        losses_batch, probs_batch = self.run_single([self.losses, self.probabilities], lst)
+        lst = list(self._encode_single(inpt))
+        labels_batch, losses_batch, probs_batch = self._run_single([self.labels, self.losses, self.probabilities], lst)
+        labels = labels_batch[0].tolist()
         losses = losses_batch[0].tolist()
-        probs_list = map(self.make_probs_dec, probs_batch[0])
-        lst_dec = self.decode_single_to_list(lst)
-        for item, loss, probs in zip(lst_dec + [self.alphabet_size], losses, probs_list):
+        probs_list = map(self._make_probs_dec, probs_batch[0])
+        lst_dec = self._decode_single_to_list(labels)
+        for item, loss, probs in zip(lst_dec, losses, probs_list):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
 class LSTMModelEncoding(LSTMModelBase):
-    def __init__(self, name, encoding_name, *args):
+    def __init__(self, name, encoding_name, *args, **kwargs):
         super(LSTMModelEncoding, self).__init__(name)
-        self.init_from_encoding(encoding_name, *args)
+        self.init_from_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
-    def __init__(self, name, alphabet_size):
-        super(LSTMModel, self).__init__(name, 'basic', alphabet_size)
+    def __init__(self, name, alphabet_size, use_long=False):
+        super(LSTMModel, self).__init__(name, 'basic', alphabet_size, use_long)
 
 class LSTMModelString(LSTMModelEncoding):
-    def __init__(self, name):
-        super(LSTMModelString, self).__init__(name, 'string')
+    def __init__(self, name, use_long=False):
+        super(LSTMModelString, self).__init__(name, 'string', use_long)
 
 class LSTMModelFile(LSTMModelBase):
     def __init__(self, name):

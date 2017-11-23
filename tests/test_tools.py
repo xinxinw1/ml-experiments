@@ -2,13 +2,39 @@ import pytest
 
 import tools
 import numpy as np
+import itertools
+
+def assert_iter_equals(it, exp):
+    for item in exp:
+        assert next(it) == item
+    with pytest.raises(StopIteration):
+        next(it)
 
 def test_group():
     assert list(tools.group([1, 2, 3], 2)) == [[1, 2], [3]]
+    assert list(tools.group([1, 2, 3, 4], 2)) == [[1, 2], [3, 4]]
+    assert list(tools.group([1, 2, 3, 4], 5)) == [[1, 2, 3, 4]]
+    input_it = iter([1, 2, 3, 4])
+    output_it = tools.group(input_it, 2)
+    assert next(output_it) == [1, 2]
+    assert next(output_it) == [3, 4]
+    with pytest.raises(StopIteration):
+        next(output_it)
 
 def test_flatmap():
     assert list(tools.flatmap(lambda s: s, [[1, 2], [3]])) == [1, 2, 3]
     assert list(tools.flatmap(lambda s: [s, s+1], [1, 2])) == [1, 2, 2, 3]
+
+def test_drop_last():
+    inp = iter([1, 2, 3, 4, 5])
+    out = tools.drop_last(inp)
+    expected = [1, 2, 3, 4]
+    assert_iter_equals(out, [1, 2, 3, 4])
+
+def test_drop_last_infinite():
+    inp = itertools.cycle([1, 2, 3, 4, 5])
+    out = itertools.islice(tools.drop_last(inp), 7)
+    assert list(out) == [1, 2, 3, 4, 5, 1, 2]
 
 def test_split_max_len():
     assert list(tools.split_max_len([[1, 2, 3, 4, 5], [1, 2], [1, 2, 3], [1, 2, 3, 4]], 4)) == [[1, 2, 3, 4], [5], [1, 2], [1, 2, 3], [1, 2, 3, 4]]
@@ -24,6 +50,56 @@ def test_single_make_batches():
     ]
     for batch, expect in zip(batches, expected):
         assert (batch == expect).all()
+
+def test_make_batches_with_start_end():
+    inputs = iter([[1, 2, 3, 4], [1], [2, 3]])
+    batches = tools.make_batches_with_start_end(inputs, 2, 0, 5)
+    expected = [
+        ([[0, 1, 2, 3, 4], [0, 1, 5, 5, 5]], [[1, 2, 3, 4, 0], [1, 0, 5, 5, 5]]),
+        ([[0, 2, 3]], [[2, 3, 0]])
+    ]
+    assert_iter_equals(batches, expected)
+
+def test_make_batches_with_start_end_infinite():
+    inputs = itertools.cycle([[1, 2, 3, 4], [1], [2, 3]])
+    batches = itertools.islice(tools.make_batches_with_start_end(inputs, 2, 0, 5), 2)
+    expected = [
+        ([[0, 1, 2, 3, 4], [0, 1, 5, 5, 5]], [[1, 2, 3, 4, 0], [1, 0, 5, 5, 5]]),
+        ([[0, 2, 3, 5, 5], [0, 1, 2, 3, 4]], [[2, 3, 0, 5, 5], [1, 2, 3, 4, 0]])
+    ]
+    assert_iter_equals(batches, expected)
+
+def test_make_batches_long():
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    batches = tools.make_batches_long(inputs, 2, 3, 0)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9], [10, 0, 0]], [[8, 9, 10], [11, 0, 0]])
+    ]
+    assert_iter_equals(batches, expected)
+
+    inputs = iter([1, 2, 3, 4])
+    batches = tools.make_batches_long(inputs, max_batch_size=1, max_batch_width=None, pad_item=0)
+    expected = [
+        ([[1, 2, 3]], [[2, 3, 4]]),
+    ]
+    assert_iter_equals(batches, expected)
+
+    inputs = [1]
+    batches = tools.make_batches_long(inputs, max_batch_size=1, max_batch_width=None, pad_item=0)
+    expected = [
+        ([[]], [[]]),
+    ]
+    assert_iter_equals(batches, expected)
+
+def test_make_batches_long_infinite():
+    inputs = itertools.cycle([1, 2, 3, 4, 5])
+    batches = itertools.islice(tools.make_batches_long(inputs, 2, 3, 0), 2)
+    expected = [
+        ([[1, 2, 3], [4, 5, 1]], [[2, 3, 4], [5, 1, 2]]),
+        ([[2, 3, 4], [5, 1, 2]], [[3, 4, 5], [1, 2, 3]])
+    ]
+    assert_iter_equals(batches, expected)
 
 @pytest.mark.parametrize('use_iter', [
     (False), (True)])
