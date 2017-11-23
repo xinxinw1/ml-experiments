@@ -69,8 +69,8 @@ def test_simple_string_long():
     model.analyze('ab')
     model.save_to_file()
 
-def test_file():
-    model = lstm.LSTMModelFile('test-file')
+def test_text_file():
+    model = lstm.LSTMModelTextFile('test-text-file')
     with open(os.path.join(config.DATA_DIR, 'test.txt'), 'r') as f:
         model.train([f])
     model.sample('a')

@@ -115,9 +115,9 @@ class StringAlphabetEncoding(BasicEncoding):
     def empty(self):
         return ''
 
-class FileEncoding(StringEncoding):
+class TextFileEncoding(StringEncoding):
     def __init__(self, max_batch_size=2, max_batch_width=200):
-        super(FileEncoding, self).__init__(True, max_batch_size, max_batch_width)
+        super(TextFileEncoding, self).__init__(True, max_batch_size, max_batch_width)
 
     def encode_single_for_training(self, inpt):
         """
@@ -130,7 +130,7 @@ encodings = {
     'basic': BasicEncoding,
     'string': StringEncoding,
     'string-alphabet': StringAlphabetEncoding,
-    'file': FileEncoding
+    'text-file': TextFileEncoding
 }
 
 class LSTMModelBase(object):
@@ -479,9 +479,9 @@ class LSTMModelString(LSTMModelEncoding):
     def __init__(self, name, use_long=False):
         super(LSTMModelString, self).__init__(name, 'string', use_long)
 
-class LSTMModelFile(LSTMModelEncoding):
+class LSTMModelTextFile(LSTMModelEncoding):
     def __init__(self, name):
-        super(LSTMModelFile, self).__init__(name, 'file')
+        super(LSTMModelTextFile, self).__init__(name, 'text-file')
 
 class LSTMModelFromFile(LSTMModelBase):
     def __init__(self, name):
