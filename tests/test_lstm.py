@@ -71,7 +71,7 @@ def test_simple_string_long():
 
 def test_text_file():
     model = lstm.LSTMModelTextFile('test-text-file')
-    with open(os.path.join(config.DATA_DIR, 'test.txt'), 'r') as f:
+    with open(os.path.join(config.ROOT_DIR, 'tests', 'small.txt'), 'r') as f:
         model.train([f])
     model.sample('a')
     model.analyze('ab')
