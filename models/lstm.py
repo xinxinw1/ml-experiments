@@ -24,23 +24,15 @@ class Encoding(ABC):
         pass
 
     @abstractmethod
-    def encode_inputs_for_training(self, inputs):
+    def encode_input_for_training(self, inpt):
         """
         Returns:
-            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+            encoded_inpt: A python iterable (if long) or list (if short) of numbers
         """
         pass
 
     @abstractmethod
-    def encode_input_for_sample(self, inpt):
-        """
-        Returns:
-            encoded_inpt: A python list of integers.
-        """
-        pass
-
-    @abstractmethod
-    def encode_input_for_analysis(self, inpt):
+    def encode_input_for_testing(self, inpt):
         """
         Returns:
             encoded_inpt: A python list of integers.
@@ -126,13 +118,6 @@ class BasicEncoding(Encoding):
         """
         return inpt
 
-    def encode_inputs_for_training(self, inputs):
-        """
-        Returns:
-            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
-        """
-        return map(self.encode_input_for_training, inputs)
-
     def encode_input_for_training(self, inpt):
         """
         Returns:
@@ -140,14 +125,7 @@ class BasicEncoding(Encoding):
         """
         return self.encode_input(inpt)
 
-    def encode_input_for_sample(self, inpt):
-        """
-        Returns:
-            encoded_inpt: A python list of integers.
-        """
-        return self.encode_input(inpt)
-
-    def encode_input_for_analysis(self, inpt):
+    def encode_input_for_testing(self, inpt):
         """
         Returns:
             encoded_inpt: A python list of integers.
@@ -476,7 +454,7 @@ class LSTMModelBase(object):
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
-        inputs = self.encoding.encode_inputs_for_training(inputs)
+        inputs = map(self.encoding.encode_input_for_training, inputs)
         batches = self.encoding.make_batches_for_training(inputs)
 
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
@@ -517,9 +495,7 @@ class LSTMModelBase(object):
         """
         if starting is None:
             starting = self.encoding.empty()
-        starting = self.encoding.encode_input_for_sample(starting)
-        # starting: A python iterable of numbers
-        curr = list(starting)
+        curr = list(self.encoding.encode_input_for_testing(starting))
         curr_output = list(curr)
         try:
             for i in range(max_num):
@@ -545,7 +521,7 @@ class LSTMModelBase(object):
         Args:
             starting: A thing that encodes to a python iterable of numbers
         """
-        lst = list(self.encoding.encode_input_for_analysis(inpt))
+        lst = list(self.encoding.encode_input_for_testing(inpt))
         batch = self.encoding.make_batch_for_analysis(lst)
         labels_batch, losses_batch, probs_batch = self._run_batch(
                 [self.labels, self.losses, self.probabilities], batch)
