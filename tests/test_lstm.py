@@ -21,6 +21,8 @@ def test_simple_short():
     model.analyze([1, 0])
     model.save_to_file()
 
+    model.train([[1, 0]] * 1000, autosave=30)
+
 def test_simple_string_short():
     model = lstm.LSTMModelString('test-simple-string')
     model.train(['ab'] * 50)

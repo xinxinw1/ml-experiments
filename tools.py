@@ -2,6 +2,7 @@ import shutil
 import math
 import numpy as np
 import itertools
+from datetime import datetime
 
 def group(lst, n):
     """
@@ -282,3 +283,6 @@ def file_to_chars(f):
 
 def file_to_bytes(f):
     return flatmap(string_to_bytes, file_to_chars(f))
+
+def date_str():
+    return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

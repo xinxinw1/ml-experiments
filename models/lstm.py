@@ -381,8 +381,10 @@ class LSTMModelBase(object):
 
         logging.info('Loaded from file %s' % file_path)
 
-    def save_to_file(self):
-        save_dir = os.path.join(config.SAVED_MODELS_DIR, self.name)
+    def save_to_file(self, name=None):
+        if name is None:
+            name = self.name
+        save_dir = os.path.join(config.SAVED_MODELS_DIR, name)
         tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir, exist_ok=True)
 
@@ -449,7 +451,7 @@ class LSTMModelBase(object):
     def _decode_output_to_list(self, outpt):
         return list(map(self._decode_if_ok, outpt))
 
-    def train(self, inputs):
+    def train(self, inputs, autosave=None):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
@@ -478,9 +480,16 @@ class LSTMModelBase(object):
                     #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                     #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                 # curr_states = new_states
+                if autosave is not None and i % autosave == 0:
+                    name = self.name + '_' + str(i)
+                    self.save_to_file(name)
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
         logging.info('Saved summaries to %s' % summaries_dir)
+        if autosave is not None and i % autosave != 0:
+            # Save the last one only if it hasn't already been saved
+            name = self.name + '_' + str(i)
+            self.save_to_file(name)
 
     def _make_probs_dec(self, probs):
         probs_dec = [(self._decode_if_ok(i), prob) for i, prob in enumerate(probs)]

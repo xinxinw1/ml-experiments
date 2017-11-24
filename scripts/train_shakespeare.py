@@ -9,5 +9,5 @@ import itertools
 
 model = lstm.LSTMModelTextFile('shakespeare')
 with open(os.path.join(config.DATA_DIR, 'shakespeare_input.txt'), 'r') as f:
-    model.train([f])
+    model.train([f], autosave=500)
 model.save_to_file()
