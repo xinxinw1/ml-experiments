@@ -289,6 +289,7 @@ class LSTMModelBase(object):
             lstm_cells = list(map(tf.contrib.rnn.BasicLSTMCell, self.state_sizes))
             lstm = tf.contrib.rnn.MultiRNNCell(lstm_cells)
             rnn_output, rnn_states = tf.nn.dynamic_rnn(lstm, self.inputs_one_hot, dtype=tf.float32)
+            tf.summary.histogram('rnn_output', rnn_output)
             # rnn_outputs is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
             # state is a list of tensors with dim batch_size x state_size
 
@@ -301,11 +302,13 @@ class LSTMModelBase(object):
 
             logits = tf.contrib.layers.fully_connected(rnn_output, self.effective_alphabet_size, activation_fn=None)
             self.logits = tf.identity(logits, name='logits')
+            tf.summary.histogram('logits', self.logits)
 
             losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=self.labels,
                     logits=self.logits)
             self.losses = tf.identity(losses, name='losses')
+            tf.summary.histogram('losses', self.losses)
             # losses is a tensor with dim batch_size x (timestamps+1)
 
             self.loss_mean = tf.reduce_mean(self.losses, name='loss_mean')
@@ -322,6 +325,7 @@ class LSTMModelBase(object):
             # self.optimize = tf.train.AdadeltaOptimizer(0.03).minimize(self.loss_mean, name='optimize')
 
             self.probabilities = tf.nn.softmax(self.logits, name='probabilities')
+            tf.summary.histogram('probabilities', self.probabilities)
 
             self.saver = tf.train.Saver()
 
@@ -465,7 +469,7 @@ class LSTMModelBase(object):
 
         summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)
-        summary_writer = tf.summary.FileWriter(summaries_dir)
+        summary_writer = tf.summary.FileWriter(summaries_dir, self.graph)
 
         curr_states = None
         try:
