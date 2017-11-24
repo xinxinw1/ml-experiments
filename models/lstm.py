@@ -24,55 +24,170 @@ class Encoding(ABC):
         pass
 
     @abstractmethod
-    def encode_single_for_training(self, inpt):
+    def encode_inputs_for_training(self, inputs):
         """
         Returns:
-            encoded: A python iterable (if long) or list (if short) of numbers
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
         """
         pass
 
     @abstractmethod
-    def encode_single_for_analysis(self, inpt):
+    def encode_input_for_sample(self, inpt):
         """
         Returns:
-            encoded: A python iterable (if long) or list (if short) of numbers
+            encoded_inpt: A python list of integers.
         """
         pass
 
     @abstractmethod
-    def decode_single(self, outpt):
+    def encode_input_for_analysis(self, inpt):
+        """
+        Returns:
+            encoded_inpt: A python list of integers.
+        """
+        pass
+
+    @abstractmethod
+    def make_batches_for_training(self, encoded_inputs):
+        """
+        Args:
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        Returns:
+            batches_it: A python iterable of batches where each batch is a tuple
+                (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        pass
+
+    @abstractmethod
+    def make_input_for_sample(self, encoded_inpt):
+        """
+        Args:
+            encoded_inpt: A python list of integers.
+        Returns:
+            sample_inpt: A python list of integers.
+        """
+        pass
+
+    @abstractmethod
+    def make_batch_for_analysis(self, encoded_inpt):
+        """
+        Args:
+            encoded_inpt: A python list of integers.
+        Returns:
+            batch: A python tuple (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        pass
+
+    @abstractmethod
+    def decode_output(self, outpt):
+        """
+        Args:
+            outpt: A python iterable of integers.
+        """
         pass
 
     @abstractmethod
     def decode_num(self, num):
+        """
+        Args:
+            num: A python integer.
+        """
         pass
 
     @abstractmethod
     def empty(self):
+        """
+        Returns:
+            empty_single: An empty starting object to use in sample
+        """
         pass
 
 class BasicEncoding(Encoding):
-    def __init__(self, alphabet_size, use_long=False, max_batch_size=None, max_batch_width=200):
+    def __init__(self, alphabet_size, use_long=False, **kwargs):
         self.alphabet_size = alphabet_size
+        self.token_item = self.alphabet_size
+        self.pad_item = self.alphabet_size+1
+        self.effective_alphabet_size = self.alphabet_size+2
         self.use_long = use_long
-        if max_batch_size is None:
-            if use_long:
-                max_batch_size = 2
-            else:
-                max_batch_size = 10
-        self.max_batch_size = max_batch_size
-        self.max_batch_width = max_batch_width
+        if self.use_long:
+            max_batch_size = kwargs.get('max_batch_size', 2)
+            max_batch_width = kwargs.get('max_batch_width', 200)
+            self.batch_maker = tools.LongBatchMaker(max_batch_size, max_batch_width, self.pad_item)
+        else:
+            max_batch_size = kwargs.get('max_batch_size', 10)
+            self.batch_maker = tools.ShortBatchMaker(max_batch_size, self.token_item, self.pad_item)
 
-    def encode_single(self, inpt):
+    def encode_input(self, inpt):
+        """
+        Returns:
+            encoded_inpt: A python iterable of integers.
+        """
         return inpt
 
-    def encode_single_for_training(self, inpt):
-        return self.encode_single(inpt)
+    def encode_inputs_for_training(self, inputs):
+        """
+        Returns:
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        """
+        return map(self.encode_input_for_training, inputs)
 
-    def encode_single_for_analysis(self, inpt):
-        return self.encode_single(inpt)
+    def encode_input_for_training(self, inpt):
+        """
+        Returns:
+            encoded_inpt: A python iterable (if long) or list (if short) of numbers
+        """
+        return self.encode_input(inpt)
 
-    def decode_single(self, outpt):
+    def encode_input_for_sample(self, inpt):
+        """
+        Returns:
+            encoded_inpt: A python list of integers.
+        """
+        return self.encode_input(inpt)
+
+    def encode_input_for_analysis(self, inpt):
+        """
+        Returns:
+            encoded_inpt: A python list of integers.
+        """
+        return self.encode_input(inpt)
+
+    def make_batches_for_training(self, encoded_inputs):
+        """
+        Args:
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        Returns:
+            batches_it: A python iterable of batches where each batch is a tuple
+                (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        if self.use_long:
+            encoded_inputs = tools.flat(encoded_inputs)
+        batches = self.batch_maker.make_batches_for_training(encoded_inputs)
+        return batches
+
+    def make_input_for_sample(self, encoded_inpt):
+        """
+        Args:
+            encoded_inpt: A python list of integers.
+        Returns:
+            sample_inpt: A python list of integers.
+        """
+        return self.batch_maker.make_input_for_sample(encoded_inpt)
+
+    def make_batch_for_analysis(self, encoded_inpt):
+        """
+        Args:
+            encoded_inpt: A python list of integers.
+        Returns:
+            batch: A python tuple (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        return self.batch_maker.make_batch_for_analysis(encoded_inpt)
+
+    def decode_output(self, outpt):
         return outpt
 
     def decode_num(self, num):
@@ -82,13 +197,13 @@ class BasicEncoding(Encoding):
         return []
 
 class StringEncoding(BasicEncoding):
-    def __init__(self, use_long=False, max_batch_size=None, max_batch_width=200):
-        super(StringEncoding, self).__init__(256, use_long, max_batch_size, max_batch_width)
+    def __init__(self, **kwargs):
+        super(StringEncoding, self).__init__(256, **kwargs)
 
-    def encode_single(self, inpt):
+    def encode_input(self, inpt):
         return tools.string_to_bytes(inpt)
 
-    def decode_single(self, outpt):
+    def decode_output(self, outpt):
         return tools.bytes_to_string(outpt)
 
     def decode_num(self, num):
@@ -98,9 +213,9 @@ class StringEncoding(BasicEncoding):
         return ''
 
 class StringAlphabetEncoding(BasicEncoding):
-    def __init__(self, alphabet_size=26, use_long=False, max_batch_size=None, max_batch_width=200):
+    def __init__(self, alphabet_size=26, **kwargs):
         assert alphabet_size <= 26
-        super(StringAlphabetEncoding, self).__init__(alphabet_size, use_long, max_batch_size, max_batch_width)
+        super(StringAlphabetEncoding, self).__init__(alphabet_size, **kwargs)
 
     def encode_char(self, c):
         o = ord(c) - ord('a')
@@ -108,10 +223,10 @@ class StringAlphabetEncoding(BasicEncoding):
             raise ValueError('Expected char %s to be in alphabet size %s' % (c, self.alphabet-size))
         return o
 
-    def encode_single(self, inpt):
+    def encode_input(self, inpt):
         return list(map(self.encode_char, inpt))
 
-    def decode_single(self, outpt):
+    def decode_output(self, outpt):
         return ''.join(map(self.decode_num, outpt))
 
     def decode_num(self, num):
@@ -121,10 +236,10 @@ class StringAlphabetEncoding(BasicEncoding):
         return ''
 
 class TextFileEncoding(StringEncoding):
-    def __init__(self, max_batch_size=2, max_batch_width=200):
-        super(TextFileEncoding, self).__init__(True, max_batch_size, max_batch_width)
+    def __init__(self, **kwargs):
+        super(TextFileEncoding, self).__init__(use_long=True, **kwargs)
 
-    def encode_single_for_training(self, inpt):
+    def encode_input_for_training(self, inpt):
         """
         Args:
             inpt: A file handle
@@ -161,19 +276,14 @@ class LSTMModelBase(object):
         self.encoding_kwargs = kwargs
         self.encoding = encodings[encoding_name](*args, **kwargs)
         self.alphabet_size = self.encoding.alphabet_size
-        self.effective_alphabet_size = self.alphabet_size + 2
-        self.batch_maker = tools.BatchMaker(self.encoding.max_batch_size, self.encoding.max_batch_width, self.alphabet_size+1)
+        self.effective_alphabet_size = self.encoding.effective_alphabet_size
 
     def init_from_encoding(self, encoding_name, *args, **kwargs):
         logging.info('Initializing from encoding...')
         self._setup_encoding(encoding_name, *args, **kwargs)
-        self._init_after_encoding()
 
-    def _init_after_encoding(self):
         self._close_sess_if_open()
-
         self.graph = tf.Graph()
-
         with self.graph.as_default():
             self.inputs = tf.placeholder(tf.int32, shape=(None, None), name='inputs')
             self.labels = tf.placeholder(tf.int32, shape=(None, None), name='labels')
@@ -249,8 +359,6 @@ class LSTMModelBase(object):
         logging.info('Initialized from encoding.')
 
     def init_from_file(self):
-        self._close_sess_if_open()
-
         file_path = os.path.join(config.SAVED_MODELS_DIR, self.name, config.TAG)
         extra_file_path = file_path + '.pkl'
         with open(extra_file_path, 'rb') as f:
@@ -263,6 +371,7 @@ class LSTMModelBase(object):
 
         self.state_sizes = extra['state_sizes']
 
+        self._close_sess_if_open()
         self.graph = tf.Graph()
         with self.graph.as_default():
             self.sess = tf.Session(graph=self.graph)
@@ -353,68 +462,22 @@ class LSTMModelBase(object):
             # logging.info('End run.')
             return results
 
-    def _run_single(self, tensors, inpt):
-        """
-        Args:
-            inpt: A python list of numbers
-        """
-        if self.encoding.use_long:
-            inputs = [inpt]
-            labels = [inpt[1:] + [self.alphabet_size]]
-        else:
-            inputs = [[self.alphabet_size] + inpt]
-            labels = [inpt + [self.alphabet_size]]
-        return self._run(tensors, inputs, labels)
-
-    def _run_single_for_analysis(self, tensors, inpt):
-        """
-        Args:
-            inpt: A python list of numbers
-        """
-        if self.encoding.use_long:
-            inputs = [inpt[:-1]]
-            labels = [inpt[1:]]
-        else:
-            inputs = [[self.alphabet_size] + inpt]
-            labels = [inpt + [self.alphabet_size]]
-        return self._run(tensors, inputs, labels)
-
-    def _decode_single(self, outpt):
-        return self.encoding.decode_single(outpt)
-
-    def _decode_num(self, num):
-        return self.encoding.decode_num(num)
-
-    def _empty(self):
-        return self.encoding.empty()
+    def _decode_output(self, outpt):
+        return self.encoding.decode_output(outpt)
 
     def _decode_if_ok(self, num):
-        return self._decode_num(num) if num < self.alphabet_size else num
+        return self.encoding.decode_num(num) if num < self.alphabet_size else num
 
-    def _decode_single_to_list(self, outpt):
+    def _decode_output_to_list(self, outpt):
         return list(map(self._decode_if_ok, outpt))
-
-    def _make_batches(self, inputs):
-        """
-        Args:
-            inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
-        """
-        if self.encoding.use_long:
-            inputs = tools.flat(inputs)
-            batches = self.batch_maker.make_batches_long(inputs)
-        else:
-            max_batch_size = self.encoding.max_batch_size
-            batches = tools.make_batches_with_start_end(inputs, max_batch_size,
-                    token_item=self.alphabet_size, pad_item=self.alphabet_size+1)
-        return batches
 
     def train(self, inputs):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
-        inputs = map(self.encoding.encode_single_for_training, inputs)
-        batches = self._make_batches(inputs)
+        inputs = self.encoding.encode_inputs_for_training(inputs)
+        batches = self.encoding.make_batches_for_training(inputs)
 
         save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
         tools.rmdir_if_exists(save_dir)
@@ -453,43 +516,43 @@ class LSTMModelBase(object):
             starting: A thing that encodes to a python iterable of numbers
         """
         if starting is None:
-            starting = self._empty()
-        starting = self.encoding.encode_single_for_analysis(starting)
+            starting = self.encoding.empty()
+        starting = self.encoding.encode_input_for_sample(starting)
         # starting: A python iterable of numbers
         curr = list(starting)
-        if self.encoding.use_long and not curr:
-            raise ValueError('Starting value must be non-empty in long mode.')
         curr_output = list(curr)
         try:
             for i in range(max_num):
-                probs_batch = self._run_single(self.probabilities, curr)
+                encoded_inpt = self.encoding.make_input_for_sample(curr)
+                probs_batch = self._run(self.probabilities, [encoded_inpt])
                 probs = probs_batch[0][-1]
                 next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
-                curr_dec = self._decode_single_to_list(curr[-5:])
+                curr_dec = self._decode_output_to_list(curr[-5:])
                 next_dec = self._decode_if_ok(next_int)
                 probs_dec = self._make_probs_dec(probs)
                 logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
-                if next_int == self.alphabet_size:
+                if next_int == self.encoding.token_item:
                     break
                 if next_int < self.alphabet_size:
                     curr_output.append(next_int)
                 curr.append(next_int)
         except KeyboardInterrupt:
             logging.info('Cancelling sample...')
-        return self._decode_single(curr_output)
+        return self.encoding.decode_output(curr_output)
 
     def analyze(self, inpt):
         """
         Args:
             starting: A thing that encodes to a python iterable of numbers
         """
-        lst = list(self.encoding.encode_single_for_analysis(inpt))
-        labels_batch, losses_batch, probs_batch = self._run_single_for_analysis(
-                [self.labels, self.losses, self.probabilities], lst)
+        lst = list(self.encoding.encode_input_for_analysis(inpt))
+        batch = self.encoding.make_batch_for_analysis(lst)
+        labels_batch, losses_batch, probs_batch = self._run_batch(
+                [self.labels, self.losses, self.probabilities], batch)
         labels = labels_batch[0].tolist()
         losses = losses_batch[0].tolist()
         probs_list = map(self._make_probs_dec, probs_batch[0])
-        lst_dec = self._decode_single_to_list(labels)
+        lst_dec = self._decode_output_to_list(labels)
         for item, loss, probs in zip(lst_dec, losses, probs_list):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
@@ -499,16 +562,16 @@ class LSTMModelEncoding(LSTMModelBase):
         self.init_from_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
-    def __init__(self, name, alphabet_size, use_long=False):
-        super(LSTMModel, self).__init__(name, 'basic', alphabet_size, use_long)
+    def __init__(self, name, alphabet_size, **kwargs):
+        super(LSTMModel, self).__init__(name, 'basic', alphabet_size, **kwargs)
 
 class LSTMModelString(LSTMModelEncoding):
-    def __init__(self, name, use_long=False):
-        super(LSTMModelString, self).__init__(name, 'string', use_long)
+    def __init__(self, name, **kwargs):
+        super(LSTMModelString, self).__init__(name, 'string', **kwargs)
 
 class LSTMModelTextFile(LSTMModelEncoding):
-    def __init__(self, name):
-        super(LSTMModelTextFile, self).__init__(name, 'text-file')
+    def __init__(self, name, **kwargs):
+        super(LSTMModelTextFile, self).__init__(name, 'text-file', **kwargs)
 
 class LSTMModelFromFile(LSTMModelBase):
     def __init__(self, name):

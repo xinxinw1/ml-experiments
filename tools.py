@@ -115,7 +115,7 @@ def make_batches_long(inputs, max_batch_size, max_batch_width, pad_item):
     labels_batches_it = make_batch_half_with_it_of_nums(labels_it, max_batch_size, max_batch_width, pad_item)
     return zip(inputs_batches_it, labels_batches_it)
 
-class BatchMaker(object):
+class LongBatchMaker(object):
     def __init__(self, max_batch_size, max_batch_width, pad_item):
         self.inputs_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
         self.labels_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
@@ -123,7 +123,7 @@ class BatchMaker(object):
         self.max_batch_width = max_batch_width
         self.pad_item = pad_item
 
-    def make_batches_long(self, inputs):
+    def make_batches_for_training(self, inputs):
         """
         Args:
             inputs: A python iterable of numbers
@@ -155,6 +155,67 @@ class BatchMaker(object):
                 batch_index += 1
                 in_batch_index = 0
             yield (self.inputs_array[:batch_index], self.labels_array[:batch_index])
+
+    def make_input_for_sample(self, inpt):
+        """
+        Args:
+            inpt: A python list of integers.
+        Returns:
+            sample_inpt: A python list of integers.
+        """
+        return inpt
+
+    def make_batch_for_analysis(self, inpt):
+        """
+        Args:
+            inpt: A python list of integers.
+        Returns:
+            batch: A python tuple (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        inputs = [inpt[:-1]]
+        labels = [inpt[1:]]
+        return (inputs, labels)
+
+class ShortBatchMaker(object):
+    def __init__(self, max_batch_size, token_item, pad_item):
+        self.max_batch_size = max_batch_size
+        self.token_item = token_item
+        self.pad_item = pad_item
+
+    def make_batches_for_training(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of python lists of numbers
+        Returns:
+            batches: A python iterator of batches where each batch is a
+                tuple (inputs batch, labels batch) and each batch part
+                is a python list of lists of numbers
+        """
+        return make_batches_with_start_end(inputs, self.max_batch_size,
+                self.token_item, self.pad_item)
+
+    def make_input_for_sample(self, inpt):
+        """
+        Args:
+            inpt: A python list of integers.
+        Returns:
+            sample_inpt: A python list of integers.
+        """
+        return [self.token_item] + inpt
+
+    def make_batch_for_analysis(self, inpt):
+        """
+        Args:
+            inpt: A python list of integers.
+        Returns:
+            batch: A python tuple (inputs_batch, labels_batch) and each batch half is either
+                a python or numpy array of integers.
+        """
+        inputs = [[self.token_item] + inpt]
+        labels = [inpt + [self.token_item]]
+        return (inputs, labels)
+
 
 def make_batches(inputs, batch_size, max_single_len, token_item, pad_item):
     """

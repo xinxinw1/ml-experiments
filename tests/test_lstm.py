@@ -5,7 +5,7 @@ import os
 from models import lstm
 import config
 
-def test_simple():
+def test_simple_short():
     model = lstm.LSTMModel('test-simple', 2)
     model.train([[1, 0]] * 1000)
     model.sample()
@@ -21,7 +21,7 @@ def test_simple():
     model.analyze([1, 0])
     model.save_to_file()
 
-def test_simple_string():
+def test_simple_string_short():
     model = lstm.LSTMModelString('test-simple-string')
     model.train(['ab'] * 50)
     model.sample()
