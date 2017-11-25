@@ -162,3 +162,12 @@ def test_make_batches(use_iter):
     assert np.array_equal(labels_batch, expected_labels)
     with pytest.raises(StopIteration):
         next(batches)
+
+def test_get_latest_in_dir(tmpdir):
+    with pytest.raises(ValueError):
+        tools.get_latest_in_dir(str(tmpdir))
+    tmpdir.mkdir('1')
+    tmpdir.mkdir('2')
+    tmpdir.mkdir('12')
+    assert tools.get_latest_in_dir(str(tmpdir)) == '2'
+    assert tools.get_latest_in_dir(str(tmpdir), key=int) == '12'

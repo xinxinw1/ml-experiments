@@ -18,6 +18,22 @@ import config
 
 import tools
 
+"""
+Directory structure:
+    saved_models/
+        shakespeare/
+            3000/
+                baseline/
+                    2017-11-24_22-26-24/
+            11433/
+                baseline/
+                    2017-11-24_22-26-24/
+    saved_summaries/
+        shakespeare/
+            baseline/
+                2017-11-24_22-26-24/
+"""
+
 class Encoding(ABC):
     @abstractmethod
     def __init__(self):
@@ -232,10 +248,17 @@ encodings = {
 }
 
 class LSTMModelBase(object):
-    def __init__(self, name):
+    def __init__(self, name, saved_models_dir=None, saved_summaries_dir=None):
         self.uuid = uuid.uuid4()
         logging.info('Running __init__ %s' % self.uuid)
         self.name = name
+        if saved_models_dir is None:
+            saved_models_dir = config.SAVED_MODELS_DIR
+        if saved_summaries_dir is None:
+            saved_summaries_dir = config.SAVED_SUMMARIES_DIR
+        self.saved_models_dir = saved_models_dir
+        self.saved_summaries_dir = saved_summaries_dir
+        self.training_steps = 0
         self.sess = None
 
     def __del__(self):
@@ -342,8 +365,22 @@ class LSTMModelBase(object):
 
         logging.info('Initialized from encoding.')
 
-    def init_from_file(self):
-        file_path = os.path.join(config.SAVED_MODELS_DIR, self.name, config.TAG)
+    def init_from_file(self, from_name=None, training_steps=None, date_str=None):
+        if from_name is None:
+            from_name = self.name
+        training_steps_dir = os.path.join(self.saved_models_dir, from_name)
+        if training_steps is None:
+            training_steps = tools.get_latest_in_dir(training_steps_dir, key=int)
+        save_dir = os.path.join(training_steps_dir, str(training_steps), config.TAG)
+        if date_str is None:
+            latest_date_dir = tf.train.latest_checkpoint(save_dir)
+            if latest_date_dir is None:
+                raise FileNotFoundError('Path %s is empty' % save_dir)
+            date_str = os.path.basename(latest_date_dir)
+        file_path = os.path.join(save_dir, date_str)
+
+        logging.info('Loading model from file %s' % file_path)
+
         extra_file_path = file_path + '.pkl'
         with open(extra_file_path, 'rb') as f:
             extra = pickle.load(f)
@@ -354,6 +391,7 @@ class LSTMModelBase(object):
         self._setup_encoding(encoding_name, *encoding_args, **encoding_kwargs)
 
         self.state_sizes = extra['state_sizes']
+        self.training_steps = extra['training_steps']
 
         self._close_sess_if_open()
         self.graph = tf.Graph()
@@ -386,27 +424,29 @@ class LSTMModelBase(object):
 
             self.graph.finalize()
 
-        logging.info('Loaded from file %s' % file_path)
+        logging.info('Loaded model from file %s' % file_path)
 
-    def save_to_file(self, name=None):
-        if name is None:
-            name = self.name
-        save_dir = os.path.join(config.SAVED_MODELS_DIR, name)
-        tools.rmdir_if_exists(save_dir)
+    def save_to_file(self):
+        save_dir = os.path.join(self.saved_models_dir, self.name, str(self.training_steps), config.TAG)
         os.makedirs(save_dir, exist_ok=True)
 
-        file_path = os.path.join(save_dir, config.TAG)
-        self.saver.save(self.sess, file_path)
+        date_str = tools.date_str()
+        file_path = os.path.join(save_dir, date_str)
+
+        logging.info('Saving model to file %s' % file_path)
 
         extra = {
             'encoding_name': self.encoding_name,
             'encoding_args': self.encoding_args,
             'encoding_kwargs': self.encoding_kwargs,
-            'state_sizes': self.state_sizes
+            'state_sizes': self.state_sizes,
+            'training_steps': self.training_steps
         }
         extra_file_path = file_path + '.pkl'
-        with open(extra_file_path, 'wb') as f:
+        with open(extra_file_path, 'xb') as f:
             pickle.dump(extra, f)
+
+        self.saver.save(self.sess, file_path)
 
         logging.info('Saved model to file %s' % file_path)
 
@@ -466,9 +506,9 @@ class LSTMModelBase(object):
         inputs = map(self.encoding.encode_input_for_training, inputs)
         batches = self.encoding.make_batches_for_training(inputs)
 
-        save_dir = os.path.join(config.SAVED_SUMMARIES_DIR, self.name, config.TAG)
-        tools.rmdir_if_exists(save_dir)
-        os.makedirs(save_dir, exist_ok=True)
+        date_str = tools.date_str()
+        save_dir = os.path.join(self.saved_summaries_dir, self.name, config.TAG, date_str)
+        os.makedirs(save_dir)
 
         summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)
@@ -476,28 +516,34 @@ class LSTMModelBase(object):
 
         curr_states = None
         try:
-            for i, batch in enumerate(batches):
+            for key, batch in enumerate(batches, self.training_steps):
                 with tools.DelayedKeyboardInterrupt():
+                    # Use key instead of i or self.training_steps
+                    # to prevent the unlikely race condition
+                    # of hitting the interrupt after
+                    # the key is updated but before entering the
+                    # DelayedKeyboardInterrupt section
+                    i = key
+                    self.training_steps = key
                     if i % 10 != 0:
                         _ = self._run_batch([self.optimize], batch, curr_states)
                     else:
                         _, summary, loss_max, loss_mean, loss_min = self._run_batch(
                                 [self.optimize, self.summary, self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
                         summary_writer.add_summary(summary, i)
+                        # Note: The printed numbers are the numbers from before the optimization update happens
                         logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                         #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                         #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                     # curr_states = new_states
                     if autosave is not None and i % autosave == 0 and i != 0:
-                        name = self.name + '_' + str(i)
-                        self.save_to_file(name)
+                        self.save_to_file()
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
         logging.info('Saved summaries to %s' % summaries_dir)
         if autosave is not None and i % autosave != 0:
             # Save the last one only if it hasn't already been saved
-            name = self.name + '_' + str(i)
-            self.save_to_file(name)
+            self.save_to_file()
 
     def _make_probs_dec(self, probs):
         probs_dec = [(self._decode_if_ok(i), prob) for i, prob in enumerate(probs)]
@@ -555,8 +601,8 @@ class LSTMModelBase(object):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
 class LSTMModelEncoding(LSTMModelBase):
-    def __init__(self, name, encoding_name, *args, **kwargs):
-        super(LSTMModelEncoding, self).__init__(name)
+    def __init__(self, name, encoding_name, *args, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+        super(LSTMModelEncoding, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
@@ -572,6 +618,24 @@ class LSTMModelTextFile(LSTMModelEncoding):
         super(LSTMModelTextFile, self).__init__(name, 'text-file', **kwargs)
 
 class LSTMModelFromFile(LSTMModelBase):
-    def __init__(self, name):
-        super(LSTMModelFromFile, self).__init__(name)
-        self.init_from_file()
+    def __init__(self, name, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+        super(LSTMModelFromFile, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
+        self.init_from_file(**kwargs)
+
+def LSTMModelFromFileOrCreate(create_class, name, *args, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+    try:
+        return LSTMModelFromFile(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
+    except FileNotFoundError:
+        return create_class(name, *args, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir, **kwargs)
+
+def list_all():
+    glob_str = os.path.join(config.SAVED_MODELS_DIR, '*', '*', config.TAG, '*.meta')
+    tools.print_glob(glob_str)
+
+def list_names():
+    glob_str = os.path.join(config.SAVED_MODELS_DIR, '*')
+    tools.print_glob(glob_str)
+
+def list_instances(name):
+    glob_str = os.path.join(config.SAVED_MODELS_DIR, name, '*', config.TAG, '*.meta')
+    tools.print_glob(glob_str)

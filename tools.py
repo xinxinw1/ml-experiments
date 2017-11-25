@@ -5,6 +5,8 @@ import math
 import numpy as np
 import itertools
 import signal
+import os
+import glob
 from datetime import datetime
 
 def group(lst, n):
@@ -309,5 +311,44 @@ class DelayedKeyboardInterrupt(object):
         signal.signal(signal.SIGINT, self.old_handler)
         if self.signal_received:
             self.old_handler(*self.signal_received)
+
+def get_latest_in_dir(path, glb='*', key=None):
+    paths = glob.glob(os.path.join(path, glb))
+    if not paths:
+        raise ValueError('Path %s is empty' % path)
+    paths = map(os.path.basename, paths)
+    if key is not None:
+        return max(paths, key=key)
+    else:
+        return max(paths)
+
+def remove_from_end(s, suffix):
+    if s.endswith(suffix):
+        return s[:-len(suffix)]
+    return s
+
+import re
+
+def tryint(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+def alphanum_key(s):
+    """
+    Turn a string into a list of string and number chunks.
+        "z23a" -> ["z", 23, "a"]
+    """
+    return [tryint(c) for c in re.split('([0-9]+)', s)]
+
+def sort_nicely(l):
+    "Sort the given list in the way that humans expect."
+    return sorted(l, key=alphanum_key)
+
+def print_glob(glob_str):
+    paths = sort_nicely(glob.glob(glob_str))
+    for path in paths:
+        print(path)
 
 # todo: make alphabet
