@@ -392,7 +392,7 @@ class LSTMModelBase(object):
         self._setup_encoding(encoding_name, *encoding_args, **encoding_kwargs)
 
         self.state_sizes = extra['state_sizes']
-        self.training_steps = extra['training_steps']
+        self.training_steps = extra.get('training_steps', int(training_steps))
         self.round_steps = extra.get('round_steps', 0)
 
         self._close_sess_if_open()
