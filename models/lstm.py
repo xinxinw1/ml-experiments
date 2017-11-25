@@ -640,13 +640,6 @@ class LSTMModelFromFile(LSTMModelBase):
                 saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_file(**kwargs)
 
-"""
-    saved_models/
-        shakespeare/
-            baseline/
-                3000/
-                11433/
-"""
 def list_all(tag=config.TAG):
     # saved_models/shakespeare/baseline/3000
     glob_str = os.path.join(config.SAVED_MODELS_DIR, '*', tag, '*')
