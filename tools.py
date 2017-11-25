@@ -123,6 +123,7 @@ def make_batches_long(inputs, max_batch_size, max_batch_width, pad_item):
 
 class LongBatchMaker(object):
     def __init__(self, max_batch_size, max_batch_width, pad_item, skip_padding=False):
+        logging.info('Using skip padding %s' % skip_padding)
         self.inputs_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
         self.labels_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
         self.max_batch_size = max_batch_size

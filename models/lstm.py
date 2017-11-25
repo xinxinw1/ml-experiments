@@ -110,6 +110,9 @@ class Encoding(ABC):
 
 class BasicEncoding(Encoding):
     def __init__(self, alphabet_size, use_long=False, **kwargs):
+        # Note: If it seems like some of these options aren't being applied,
+        # it's probably because there is already a saved file and
+        # the options are being read from it
         self.alphabet_size = alphabet_size
         self.token_item = self.alphabet_size
         self.pad_item = self.alphabet_size+1
