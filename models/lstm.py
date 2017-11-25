@@ -557,6 +557,11 @@ class LSTMModelBase(object):
                         self.save_to_file()
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
+            logging.info('Saved summaries to %s' % summaries_dir)
+            if autosave is not None and i % autosave != 0:
+                # Save the last one only if it hasn't already been saved
+                self.save_to_file()
+            raise
         logging.info('Saved summaries to %s' % summaries_dir)
         if autosave is not None and i % autosave != 0:
             # Save the last one only if it hasn't already been saved
