@@ -108,8 +108,17 @@ def test_LongBatchMaker():
     def assert_fn(a, b):
         for inner_a, inner_b in zip(a, b):
             assert (inner_a == inner_b).all()
+            assert inner_a.shape == np.array(inner_b).shape
 
     maker = tools.LongBatchMaker(2, 3, 0)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8])
+    batches = maker.make_batches_for_training(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7]], [[8]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
 
     inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     batches = maker.make_batches_for_training(inputs)
@@ -124,6 +133,46 @@ def test_LongBatchMaker():
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9], [10, 0, 0]], [[8, 9, 10], [11, 0, 0]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    batches = maker.make_batches_for_training(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9], [10, 11, 12]], [[8, 9, 10], [11, 12, 13]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+def test_LongBatchMaker_skip_padding():
+    def assert_fn(a, b):
+        for inner_a, inner_b in zip(a, b):
+            assert (inner_a == inner_b).all()
+            assert inner_a.shape == np.array(inner_b).shape
+
+    maker = tools.LongBatchMaker(2, 3, 0, skip_padding=True)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8])
+    batches = maker.make_batches_for_training(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7]], [[8]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    batches = maker.make_batches_for_training(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9]], [[8, 9, 10]])
+    ]
+    assert_iter_equals(batches, expected, assert_fn)
+
+    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    batches = maker.make_batches_for_training(inputs)
+    expected = [
+        ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
+        ([[7, 8, 9]], [[8, 9, 10]])
     ]
     assert_iter_equals(batches, expected, assert_fn)
 

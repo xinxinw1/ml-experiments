@@ -156,13 +156,17 @@ class LongBatchMaker(object):
         if i != 0:
             batch_index = i // self.max_batch_width
             in_batch_index = i % self.max_batch_width
-            if in_batch_index != 0 and not self.skip_padding:
-                for in_batch_index in range(in_batch_index, self.max_batch_width):
-                    self.inputs_array[batch_index, in_batch_index] = self.pad_item
-                    self.labels_array[batch_index, in_batch_index] = self.pad_item
-                batch_index += 1
-                in_batch_index = 0
-            yield (self.inputs_array[:batch_index], self.labels_array[:batch_index])
+            if batch_index == 0:
+                # Use :1 to keep it a 2d array
+                yield (self.inputs_array[:1, :in_batch_index], self.labels_array[:1, :in_batch_index])
+            else:
+                if in_batch_index != 0 and not self.skip_padding:
+                    for in_batch_index in range(in_batch_index, self.max_batch_width):
+                        self.inputs_array[batch_index, in_batch_index] = self.pad_item
+                        self.labels_array[batch_index, in_batch_index] = self.pad_item
+                    batch_index += 1
+                    in_batch_index = 0
+                yield (self.inputs_array[:batch_index], self.labels_array[:batch_index])
 
     def make_input_for_sample(self, inpt):
         """

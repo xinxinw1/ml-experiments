@@ -79,6 +79,19 @@ def test_simple_long(lstm_kwargs_1):
     model.analyze([1, 0])
     model.save_to_file()
 
+    model.train([[1, 0]])
+
+def test_simple_long_skip_padding(lstm_kwargs_1):
+    model = lstm.LSTMModel('test-simple-long', 2, use_long=True, skip_padding=True, **lstm_kwargs_1)
+    model.train([[1, 0] * 1000])
+    model.train([[1, 0]])
+    model.save_to_file()
+
+    model = lstm.LSTMModelFromFile('test-simple-long', **lstm_kwargs_1)
+    model.train([[1, 0] * 1000])
+    model.train([[1, 0]])
+    model.save_to_file()
+
 def test_simple_string_long(lstm_kwargs_1):
     model = lstm.LSTMModelString('test-simple-string', use_long=True, **lstm_kwargs_1)
     model.train(['ab' * 50])
