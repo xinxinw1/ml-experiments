@@ -365,19 +365,14 @@ class LSTMModelBase(object):
 
         logging.info('Initialized from encoding.')
 
-    def init_from_file(self, from_name=None, training_steps=None, date_str=None):
+    def init_from_file(self, from_name=None, training_steps=None):
         if from_name is None:
             from_name = self.name
         training_steps_dir = os.path.join(self.saved_models_dir, from_name)
         if training_steps is None:
             training_steps = tools.get_latest_in_dir(training_steps_dir, key=int)
         save_dir = os.path.join(training_steps_dir, str(training_steps), config.TAG)
-        if date_str is None:
-            latest_date_dir = tf.train.latest_checkpoint(save_dir)
-            if latest_date_dir is None:
-                raise FileNotFoundError('Path %s is empty' % save_dir)
-            date_str = os.path.basename(latest_date_dir)
-        file_path = os.path.join(save_dir, date_str)
+        file_path = os.path.join(save_dir, 'data')
 
         logging.info('Loading model from file %s' % file_path)
 
@@ -426,12 +421,18 @@ class LSTMModelBase(object):
 
         logging.info('Loaded model from file %s' % file_path)
 
+    def init_from_file_or_encoding(self, *args, **kwargs):
+        try:
+            self.init_from_file()
+        except FileNotFoundError as e:
+            logging.info('File not found: %s' % e)
+            self.init_from_encoding(*args, **kwargs)
+
     def save_to_file(self):
         save_dir = os.path.join(self.saved_models_dir, self.name, str(self.training_steps), config.TAG)
         os.makedirs(save_dir, exist_ok=True)
 
-        date_str = tools.date_str()
-        file_path = os.path.join(save_dir, date_str)
+        file_path = os.path.join(save_dir, 'data')
 
         logging.info('Saving model to file %s' % file_path)
 
@@ -514,9 +515,11 @@ class LSTMModelBase(object):
         logging.info('Using summaries dir %s' % summaries_dir)
         summary_writer = tf.summary.FileWriter(summaries_dir, self.graph)
 
+        logging.info('Starting training...')
         curr_states = None
+        starting_i = self.training_steps
         try:
-            for key, batch in enumerate(batches, self.training_steps):
+            for key, batch in enumerate(batches, self.training_steps+1):
                 with tools.DelayedKeyboardInterrupt():
                     # Use key instead of i or self.training_steps
                     # to prevent the unlikely race condition
@@ -525,6 +528,11 @@ class LSTMModelBase(object):
                     # DelayedKeyboardInterrupt section
                     i = key
                     self.training_steps = key
+                    if i-1 == starting_i:
+                        loss_max, loss_mean, loss_min = self._run_batch(
+                                [self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                        logging.info('Starting values: steps: %s loss_max: %s loss_mean: %s loss_min: %s'
+                                % (starting_i, loss_max, loss_mean, loss_min))
                     if i % 10 != 0:
                         _ = self._run_batch([self.optimize], batch, curr_states)
                     else:
@@ -532,11 +540,12 @@ class LSTMModelBase(object):
                                 [self.optimize, self.summary, self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
                         summary_writer.add_summary(summary, i)
                         # Note: The printed numbers are the numbers from before the optimization update happens
+                        # Note: Step numbers start from 1
                         logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
                         #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                         #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                     # curr_states = new_states
-                    if autosave is not None and i % autosave == 0 and i != 0:
+                    if autosave is not None and i % autosave == 0:
                         self.save_to_file()
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
@@ -544,6 +553,7 @@ class LSTMModelBase(object):
         if autosave is not None and i % autosave != 0:
             # Save the last one only if it hasn't already been saved
             self.save_to_file()
+        logging.info('Done training.')
 
     def _make_probs_dec(self, probs):
         probs_dec = [(self._decode_if_ok(i), prob) for i, prob in enumerate(probs)]
@@ -603,7 +613,7 @@ class LSTMModelBase(object):
 class LSTMModelEncoding(LSTMModelBase):
     def __init__(self, name, encoding_name, *args, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
         super(LSTMModelEncoding, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
-        self.init_from_encoding(encoding_name, *args, **kwargs)
+        self.init_from_file_or_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
     def __init__(self, name, alphabet_size, **kwargs):
@@ -621,12 +631,6 @@ class LSTMModelFromFile(LSTMModelBase):
     def __init__(self, name, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
         super(LSTMModelFromFile, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_file(**kwargs)
-
-def LSTMModelFromFileOrCreate(create_class, name, *args, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
-    try:
-        return LSTMModelFromFile(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
-    except FileNotFoundError:
-        return create_class(name, *args, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir, **kwargs)
 
 def list_all():
     glob_str = os.path.join(config.SAVED_MODELS_DIR, '*', '*', config.TAG, '*.meta')

@@ -27,6 +27,8 @@ def test_simple_short(saved_dirs_kwargs):
     model.sample()
     model.analyze([1, 0])
     model.save_to_file()
+    with pytest.raises(FileExistsError):
+        model.save_to_file()
 
     model.train([[1, 0]] * 1000, autosave=30)
 

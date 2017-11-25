@@ -164,7 +164,7 @@ def test_make_batches(use_iter):
         next(batches)
 
 def test_get_latest_in_dir(tmpdir):
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         tools.get_latest_in_dir(str(tmpdir))
     tmpdir.mkdir('1')
     tmpdir.mkdir('2')

@@ -315,7 +315,7 @@ class DelayedKeyboardInterrupt(object):
 def get_latest_in_dir(path, glb='*', key=None):
     paths = glob.glob(os.path.join(path, glb))
     if not paths:
-        raise ValueError('Path %s is empty' % path)
+        raise FileNotFoundError('Path %s is empty' % path)
     paths = map(os.path.basename, paths)
     if key is not None:
         return max(paths, key=key)
