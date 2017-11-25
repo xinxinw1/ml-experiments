@@ -324,8 +324,10 @@ class LSTMModelBase(object):
             self.optimize = tf.train.AdamOptimizer().minimize(self.loss_mean, name='optimize')
             # self.optimize = tf.train.AdadeltaOptimizer(0.03).minimize(self.loss_mean, name='optimize')
 
-            self.probabilities = tf.nn.softmax(self.logits, name='probabilities')
+            self.probabilities = tf.identity(tf.nn.softmax(self.logits), name='probabilities')
             tf.summary.histogram('probabilities', self.probabilities)
+
+            self.next_probabilities = tf.identity(self.probabilities[:, -1], name='next_probabailities')
 
             self.saver = tf.train.Saver()
 
@@ -373,6 +375,7 @@ class LSTMModelBase(object):
             self.loss_sum = self.graph.get_tensor_by_name('loss_sum:0')
             self.optimize = self.graph.get_operation_by_name('optimize')
             self.probabilities = self.graph.get_tensor_by_name('probabilities:0')
+            self.next_probabilities = tools.get_tensor_by_name_if_exists(self.graph, 'next_probabilities:0')
 
             # self.init_states = tuple(self.graph.get_tensor_by_name('init_state_' + str(i) + ':0')
             #         for i in range(len(self.state_sizes)))
@@ -513,8 +516,12 @@ class LSTMModelBase(object):
         try:
             for i in range(max_num):
                 encoded_inpt = self.encoding.make_input_for_sample(curr)
-                probs_batch = self._run(self.probabilities, [encoded_inpt])
-                probs = probs_batch[0][-1]
+                if self.next_probabilities is not None:
+                    probs_batch = self._run(self.next_probabilities, [encoded_inpt])
+                    probs = probs_batch[0]
+                else:
+                    probs_batch = self._run(self.probabilities, [encoded_inpt])
+                    probs = probs_batch[0][-1]
                 next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
                 curr_dec = self._decode_output_to_list(curr[-5:])
                 next_dec = self._decode_if_ok(next_int)

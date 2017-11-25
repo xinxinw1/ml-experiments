@@ -286,3 +286,9 @@ def file_to_bytes(f):
 
 def date_str():
     return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+def get_tensor_by_name_if_exists(graph, name):
+    try:
+        return graph.get_tensor_by_name(name)
+    except KeyError:
+        return None
