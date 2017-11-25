@@ -245,14 +245,18 @@ encodings = {
 }
 
 class LSTMModelBase(object):
-    def __init__(self, name, saved_models_dir=None, saved_summaries_dir=None):
+    def __init__(self, name, tag=None, saved_models_dir=None, saved_summaries_dir=None):
         self.uuid = uuid.uuid4()
         logging.info('Running __init__ %s' % self.uuid)
         self.name = name
+        if tag is None:
+            tag = config.TAG
+        logging.info('Using tag %s and name %s' % (tag, name))
         if saved_models_dir is None:
             saved_models_dir = config.SAVED_MODELS_DIR
         if saved_summaries_dir is None:
             saved_summaries_dir = config.SAVED_SUMMARIES_DIR
+        self.tag = tag
         self.saved_models_dir = saved_models_dir
         self.saved_summaries_dir = saved_summaries_dir
         self.training_steps = 0
@@ -365,7 +369,7 @@ class LSTMModelBase(object):
     def init_from_file(self, from_name=None, training_steps=None):
         if from_name is None:
             from_name = self.name
-        training_steps_dir = os.path.join(self.saved_models_dir, from_name, config.TAG)
+        training_steps_dir = os.path.join(self.saved_models_dir, from_name, self.tag)
         if training_steps is None:
             training_steps = tools.get_latest_in_dir(training_steps_dir, key=int)
         save_dir = os.path.join(training_steps_dir, str(training_steps))
@@ -427,7 +431,7 @@ class LSTMModelBase(object):
             self.init_from_encoding(*args, **kwargs)
 
     def save_to_file(self):
-        save_dir = os.path.join(self.saved_models_dir, self.name, config.TAG, str(self.training_steps))
+        save_dir = os.path.join(self.saved_models_dir, self.name, self.tag, str(self.training_steps))
         os.makedirs(save_dir)
 
         file_path = os.path.join(save_dir, 'data')
@@ -509,7 +513,7 @@ class LSTMModelBase(object):
         """
         batches = self.encode_and_make_batches_for_training(inputs)
 
-        save_dir = os.path.join(self.saved_summaries_dir, self.name, config.TAG)
+        save_dir = os.path.join(self.saved_summaries_dir, self.name, self.tag)
         os.makedirs(save_dir, exist_ok=True)
 
         summaries_dir = save_dir
@@ -612,8 +616,10 @@ class LSTMModelBase(object):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
 class LSTMModelEncoding(LSTMModelBase):
-    def __init__(self, name, encoding_name, *args, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
-        super(LSTMModelEncoding, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
+    def __init__(self, name, encoding_name, *args, tag=None,
+            saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+        super(LSTMModelEncoding, self).__init__(name, tag=tag,
+                saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_file_or_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
@@ -629,18 +635,27 @@ class LSTMModelTextFile(LSTMModelEncoding):
         super(LSTMModelTextFile, self).__init__(name, 'text-file', **kwargs)
 
 class LSTMModelFromFile(LSTMModelBase):
-    def __init__(self, name, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
-        super(LSTMModelFromFile, self).__init__(name, saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
+    def __init__(self, name, tag=None, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+        super(LSTMModelFromFile, self).__init__(name, tag=tag,
+                saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_file(**kwargs)
 
-def list_all():
-    glob_str = os.path.join(config.SAVED_MODELS_DIR, '*', '*', config.TAG, '*.meta')
+"""
+    saved_models/
+        shakespeare/
+            baseline/
+                3000/
+                11433/
+"""
+def list_all(tag=config.TAG):
+    # saved_models/shakespeare/baseline/3000
+    glob_str = os.path.join(config.SAVED_MODELS_DIR, '*', tag, '*')
     tools.print_glob(glob_str)
 
 def list_names():
     glob_str = os.path.join(config.SAVED_MODELS_DIR, '*')
     tools.print_glob(glob_str)
 
-def list_instances(name):
-    glob_str = os.path.join(config.SAVED_MODELS_DIR, name, '*', config.TAG, '*.meta')
+def list_instances(name, tag=config.TAG):
+    glob_str = os.path.join(config.SAVED_MODELS_DIR, name, tag, '*')
     tools.print_glob(glob_str)
