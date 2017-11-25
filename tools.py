@@ -1,7 +1,10 @@
+import my_logging as logging
+
 import shutil
 import math
 import numpy as np
 import itertools
+import signal
 from datetime import datetime
 
 def group(lst, n):
@@ -292,3 +295,19 @@ def get_tensor_by_name_if_exists(graph, name):
         return graph.get_tensor_by_name(name)
     except KeyError:
         return None
+
+class DelayedKeyboardInterrupt(object):
+    def __enter__(self):
+        self.signal_received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+        logging.info('KeyboardInterrupt received.')
+
+    def __exit__(self, type, value, traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received:
+            self.old_handler(*self.signal_received)
+
+# todo: make alphabet

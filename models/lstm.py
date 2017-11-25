@@ -477,19 +477,20 @@ class LSTMModelBase(object):
         curr_states = None
         try:
             for i, batch in enumerate(batches):
-                if i % 10 != 0:
-                    _ = self._run_batch([self.optimize], batch, curr_states)
-                else:
-                    _, summary, loss_max, loss_mean, loss_min = self._run_batch(
-                            [self.optimize, self.summary, self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
-                    summary_writer.add_summary(summary, i)
-                    logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
-                    #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
-                    #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
-                # curr_states = new_states
-                if autosave is not None and i % autosave == 0 and i != 0:
-                    name = self.name + '_' + str(i)
-                    self.save_to_file(name)
+                with tools.DelayedKeyboardInterrupt():
+                    if i % 10 != 0:
+                        _ = self._run_batch([self.optimize], batch, curr_states)
+                    else:
+                        _, summary, loss_max, loss_mean, loss_min = self._run_batch(
+                                [self.optimize, self.summary, self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
+                        summary_writer.add_summary(summary, i)
+                        logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
+                        #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
+                        #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
+                    # curr_states = new_states
+                    if autosave is not None and i % autosave == 0 and i != 0:
+                        name = self.name + '_' + str(i)
+                        self.save_to_file(name)
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
         logging.info('Saved summaries to %s' % summaries_dir)
@@ -515,23 +516,24 @@ class LSTMModelBase(object):
         curr_output = list(curr)
         try:
             for i in range(max_num):
-                encoded_inpt = self.encoding.make_input_for_sample(curr)
-                if self.next_probabilities is not None:
-                    probs_batch = self._run(self.next_probabilities, [encoded_inpt])
-                    probs = probs_batch[0]
-                else:
-                    probs_batch = self._run(self.probabilities, [encoded_inpt])
-                    probs = probs_batch[0][-1]
-                next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
-                curr_dec = self._decode_output_to_list(curr[-5:])
-                next_dec = self._decode_if_ok(next_int)
-                probs_dec = self._make_probs_dec(probs)
-                logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
-                if next_int == self.encoding.token_item:
-                    break
-                if next_int < self.alphabet_size:
-                    curr_output.append(next_int)
-                curr.append(next_int)
+                with tools.DelayedKeyboardInterrupt():
+                    encoded_inpt = self.encoding.make_input_for_sample(curr)
+                    if self.next_probabilities is not None:
+                        probs_batch = self._run(self.next_probabilities, [encoded_inpt])
+                        probs = probs_batch[0]
+                    else:
+                        probs_batch = self._run(self.probabilities, [encoded_inpt])
+                        probs = probs_batch[0][-1]
+                    next_int = np.random.choice(self.effective_alphabet_size, 1, p=probs).item()
+                    curr_dec = self._decode_output_to_list(curr[-5:])
+                    next_dec = self._decode_if_ok(next_int)
+                    probs_dec = self._make_probs_dec(probs)
+                    logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
+                    if next_int == self.encoding.token_item:
+                        break
+                    if next_int < self.alphabet_size:
+                        curr_output.append(next_int)
+                    curr.append(next_int)
         except KeyboardInterrupt:
             logging.info('Cancelling sample...')
         return self.encoding.decode_output(curr_output)
