@@ -22,16 +22,12 @@ import tools
 Directory structure:
     saved_models/
         shakespeare/
-            3000/
-                baseline/
-                    2017-11-24_22-26-24/
-            11433/
-                baseline/
-                    2017-11-24_22-26-24/
+            baseline/
+                3000/
+                11433/
     saved_summaries/
         shakespeare/
             baseline/
-                2017-11-24_22-26-24/
 """
 
 class Encoding(ABC):
@@ -122,7 +118,8 @@ class BasicEncoding(Encoding):
         if self.use_long:
             max_batch_size = kwargs.get('max_batch_size', 2)
             max_batch_width = kwargs.get('max_batch_width', 200)
-            self.batch_maker = tools.LongBatchMaker(max_batch_size, max_batch_width, self.pad_item)
+            skip_padding = kwargs.get('skip_padding', False)
+            self.batch_maker = tools.LongBatchMaker(max_batch_size, max_batch_width, self.pad_item, skip_padding)
         else:
             max_batch_size = kwargs.get('max_batch_size', 10)
             self.batch_maker = tools.ShortBatchMaker(max_batch_size, self.token_item, self.pad_item)
@@ -368,10 +365,10 @@ class LSTMModelBase(object):
     def init_from_file(self, from_name=None, training_steps=None):
         if from_name is None:
             from_name = self.name
-        training_steps_dir = os.path.join(self.saved_models_dir, from_name)
+        training_steps_dir = os.path.join(self.saved_models_dir, from_name, config.TAG)
         if training_steps is None:
             training_steps = tools.get_latest_in_dir(training_steps_dir, key=int)
-        save_dir = os.path.join(training_steps_dir, str(training_steps), config.TAG)
+        save_dir = os.path.join(training_steps_dir, str(training_steps))
         file_path = os.path.join(save_dir, 'data')
 
         logging.info('Loading model from file %s' % file_path)
@@ -422,15 +419,16 @@ class LSTMModelBase(object):
         logging.info('Loaded model from file %s' % file_path)
 
     def init_from_file_or_encoding(self, *args, **kwargs):
+        logging.info('Initializing %s from file or encoding...' % self.name)
         try:
             self.init_from_file()
         except FileNotFoundError as e:
-            logging.info('File not found: %s' % e)
+            logging.info('File not found for %s, initializing from encoding...' % self.name)
             self.init_from_encoding(*args, **kwargs)
 
     def save_to_file(self):
-        save_dir = os.path.join(self.saved_models_dir, self.name, str(self.training_steps), config.TAG)
-        os.makedirs(save_dir, exist_ok=True)
+        save_dir = os.path.join(self.saved_models_dir, self.name, config.TAG, str(self.training_steps))
+        os.makedirs(save_dir)
 
         file_path = os.path.join(save_dir, 'data')
 
@@ -499,17 +497,20 @@ class LSTMModelBase(object):
     def _decode_output_to_list(self, outpt):
         return list(map(self._decode_if_ok, outpt))
 
+    def encode_and_make_batches_for_training(self, inputs):
+        inputs = map(self.encoding.encode_input_for_training, inputs)
+        batches = self.encoding.make_batches_for_training(inputs)
+        return batches
+
     def train(self, inputs, autosave=None):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
-        inputs = map(self.encoding.encode_input_for_training, inputs)
-        batches = self.encoding.make_batches_for_training(inputs)
+        batches = self.encode_and_make_batches_for_training(inputs)
 
-        date_str = tools.date_str()
-        save_dir = os.path.join(self.saved_summaries_dir, self.name, config.TAG, date_str)
-        os.makedirs(save_dir)
+        save_dir = os.path.join(self.saved_summaries_dir, self.name, config.TAG)
+        os.makedirs(save_dir, exist_ok=True)
 
         summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)

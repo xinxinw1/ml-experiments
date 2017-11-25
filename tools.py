@@ -122,12 +122,13 @@ def make_batches_long(inputs, max_batch_size, max_batch_width, pad_item):
     return zip(inputs_batches_it, labels_batches_it)
 
 class LongBatchMaker(object):
-    def __init__(self, max_batch_size, max_batch_width, pad_item):
+    def __init__(self, max_batch_size, max_batch_width, pad_item, skip_padding=False):
         self.inputs_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
         self.labels_array = np.zeros((max_batch_size, max_batch_width), dtype=np.int32)
         self.max_batch_size = max_batch_size
         self.max_batch_width = max_batch_width
         self.pad_item = pad_item
+        self.skip_padding = skip_padding
 
     def make_batches_for_training(self, inputs):
         """
@@ -154,7 +155,7 @@ class LongBatchMaker(object):
         if i != 0:
             batch_index = i // self.max_batch_width
             in_batch_index = i % self.max_batch_width
-            if in_batch_index != 0:
+            if in_batch_index != 0 and not self.skip_padding:
                 for in_batch_index in range(in_batch_index, self.max_batch_width):
                     self.inputs_array[batch_index, in_batch_index] = self.pad_item
                     self.labels_array[batch_index, in_batch_index] = self.pad_item
