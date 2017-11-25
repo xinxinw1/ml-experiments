@@ -11,6 +11,7 @@ import uuid
 import os
 import json
 import pickle
+import itertools
 from abc import ABC, abstractmethod
 
 
@@ -263,6 +264,7 @@ class LSTMModelBase(object):
         self.saved_models_dir = saved_models_dir
         self.saved_summaries_dir = saved_summaries_dir
         self.training_steps = 0
+        self.round_steps = 0
         self.sess = None
 
     def __del__(self):
@@ -391,6 +393,7 @@ class LSTMModelBase(object):
 
         self.state_sizes = extra['state_sizes']
         self.training_steps = extra['training_steps']
+        self.round_steps = extra.get('round_steps', 0)
 
         self._close_sess_if_open()
         self.graph = tf.Graph()
@@ -435,6 +438,8 @@ class LSTMModelBase(object):
 
     def save_to_file(self):
         save_dir = os.path.join(self.saved_models_dir, self.name, self.tag, str(self.training_steps))
+        # Allow overwriting an existing save because we don't lose any data here
+        tools.rmdir_if_exists(save_dir)
         os.makedirs(save_dir)
 
         file_path = os.path.join(save_dir, 'data')
@@ -446,7 +451,8 @@ class LSTMModelBase(object):
             'encoding_args': self.encoding_args,
             'encoding_kwargs': self.encoding_kwargs,
             'state_sizes': self.state_sizes,
-            'training_steps': self.training_steps
+            'training_steps': self.training_steps,
+            'round_steps': self.round_steps
         }
         extra_file_path = file_path + '.pkl'
         with open(extra_file_path, 'xb') as f:
@@ -509,12 +515,19 @@ class LSTMModelBase(object):
         batches = self.encoding.make_batches_for_training(inputs)
         return batches
 
-    def train(self, inputs, autosave=None):
+    def train(self, inputs, autosave=None, cont=False):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
         batches = self.encode_and_make_batches_for_training(inputs)
+        if cont:
+            logging.info('Continuing enabled! Starting from round %s' % self.round_steps)
+            # Note: round_steps is the number of rounds completed, so
+            # is also the index of the next round to be done
+            batches = itertools.islice(batches, self.round_steps, None)
+        else:
+            self.round_steps = 0
 
         save_dir = os.path.join(self.saved_summaries_dir, self.name, self.tag)
         os.makedirs(save_dir, exist_ok=True)
@@ -526,21 +539,26 @@ class LSTMModelBase(object):
         logging.info('Starting training...')
         curr_states = None
         starting_i = self.training_steps
+        starting_round = self.round_steps
+        # Need this i set for if there ends up being no batches due to continuing
+        i = starting_i
         try:
-            for key, batch in enumerate(batches, self.training_steps+1):
+            for batch in batches:
                 with tools.DelayedKeyboardInterrupt():
                     # Use key instead of i or self.training_steps
                     # to prevent the unlikely race condition
                     # of hitting the interrupt after
                     # the key is updated but before entering the
                     # DelayedKeyboardInterrupt section
-                    i = key
-                    self.training_steps = key
+                    self.training_steps += 1
+                    self.round_steps += 1
+                    i = self.training_steps
+                    # i, training_steps will be steps completed after the run_batch
                     if i-1 == starting_i:
                         loss_max, loss_mean, loss_min = self._run_batch(
                                 [self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
-                        logging.info('Starting values: steps: %s loss_max: %s loss_mean: %s loss_min: %s'
-                                % (starting_i, loss_max, loss_mean, loss_min))
+                        logging.info('Starting values: steps: %s round: %s loss_max: %s loss_mean: %s loss_min: %s'
+                                % (starting_i, starting_round, loss_max, loss_mean, loss_min))
                     if i % 10 != 0:
                         _ = self._run_batch([self.optimize], batch, curr_states)
                     else:
@@ -549,7 +567,8 @@ class LSTMModelBase(object):
                         summary_writer.add_summary(summary, i)
                         # Note: The printed numbers are the numbers from before the optimization update happens
                         # Note: Step numbers start from 1
-                        logging.info('Step %s: loss_max: %s loss_mean: %s loss_min: %s' % (i, loss_max, loss_mean, loss_min))
+                        logging.info('Step %s, round %s: loss_max: %s loss_mean: %s loss_min: %s'
+                                % (i, self.round_steps, loss_max, loss_mean, loss_min))
                         #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                         #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                     # curr_states = new_states
@@ -562,11 +581,13 @@ class LSTMModelBase(object):
                 # Save the last one only if it hasn't already been saved
                 self.save_to_file()
             raise
-        logging.info('Saved summaries to %s' % summaries_dir)
-        if autosave is not None and i % autosave != 0:
-            # Save the last one only if it hasn't already been saved
-            self.save_to_file()
-        logging.info('Done training.')
+        else:
+            self.round_steps = 0
+            logging.info('Saved summaries to %s' % summaries_dir)
+            if autosave is not None:
+                # Always save the last one because round_steps has changed
+                self.save_to_file()
+            logging.info('Done training.')
 
     def _make_probs_dec(self, probs):
         probs_dec = [(self._decode_if_ok(i), prob) for i, prob in enumerate(probs)]
