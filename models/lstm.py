@@ -484,7 +484,7 @@ class LSTMModelBase(object):
                     #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                     #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                 # curr_states = new_states
-                if autosave is not None and i % autosave == 0:
+                if autosave is not None and i % autosave == 0 and i != 0:
                     name = self.name + '_' + str(i)
                     self.save_to_file(name)
         except KeyboardInterrupt:
