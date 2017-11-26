@@ -7,6 +7,6 @@ from models import lstm
 import os
 import itertools
 
-model = lstm.LSTMModelTextFile('shakespeare', skip_padding=True)
-with open(os.path.join(config.DATA_DIR, 'shakespeare_input.txt'), 'r') as f:
-    model.train([f], autosave=3000, cont=True)
+path = os.path.join(config.DATA_DIR, 'shakespeare_input.txt')
+model = lstm.LSTMModelTextFileAlphabet('shakespeare', path, skip_padding=True)
+model.train([path]*3, autosave=3000, cont=True)

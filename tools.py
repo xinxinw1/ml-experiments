@@ -89,6 +89,15 @@ def make_batch_half_with_it_of_nums(it_of_nums, max_batch_size, max_batch_width,
     # it_of_lists is iterator of python lists of numbers
     return make_batch_half_with_it_of_lists(it_of_lists, max_batch_size, pad_item)
 
+def debug(item):
+    print(item)
+    return item
+
+def debug_it(it):
+    lst = list(it)
+    print(lst)
+    return iter(lst)
+
 def make_batches_with_start_end(inputs, max_batch_size, token_item, pad_item):
     """
     Args:
@@ -280,20 +289,27 @@ def bytes_to_string(byte_list):
     except UnicodeDecodeError:
         return bytes(byte_list)
 
-def file_to_chars(f):
+def is_string_or_bytes(s):
+    return isinstance(s, str) or isinstance(s, bytes)
+
+def file_to_chars(path):
     """
     Args:
-        f: File object such as from open('file.txt')
+        path: A file path
     """
-    while True:
-        c = f.read(1)
-        if c:
-            yield c
-        else:
-            break
+    with open(path, 'r') as f:
+        while True:
+            c = f.read(1)
+            if c:
+                yield c
+            else:
+                break
 
-def file_to_bytes(f):
-    return flatmap(string_to_bytes, file_to_chars(f))
+def file_to_bytes(path):
+    return flatmap(string_to_bytes, file_to_chars(path))
+
+def file_to_alphabet(path):
+    return set(file_to_chars(path))
 
 def date_str():
     return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -356,5 +372,3 @@ def print_glob(glob_str):
     paths = sort_nicely(glob.glob(glob_str))
     for path in paths:
         print(path)
-
-# todo: make alphabet

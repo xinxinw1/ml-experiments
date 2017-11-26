@@ -131,7 +131,7 @@ class BasicEncoding(Encoding):
     def encode_input(self, inpt):
         """
         Returns:
-            encoded_inpt: A python iterable of integers.
+            encoded_inpt: A python list of integers.
         """
         return inpt
 
@@ -191,9 +191,31 @@ class BasicEncoding(Encoding):
     def empty(self):
         return []
 
+class AlphabetEncoding(BasicEncoding):
+    def __init__(self, alphabet, **kwargs):
+        self.entry_to_num = {}
+        self.num_to_entry = []
+        for num, entry in enumerate(alphabet):
+            self.entry_to_num[entry] = num
+            self.num_to_entry.append(entry)
+        alphabet_size = len(self.num_to_entry)
+        BasicEncoding.__init__(self, alphabet_size, **kwargs)
+
+    def encode_entry(self, entry):
+        return self.entry_to_num[entry]
+
+    def decode_num(self, num):
+        return self.num_to_entry[num]
+
+    def encode_input(self, inpt):
+        return list(map(self.encode_entry, inpt))
+
+    def decode_output(self, outpt):
+        return list(map(self.decode_num, outpt))
+
 class StringEncoding(BasicEncoding):
     def __init__(self, **kwargs):
-        super(StringEncoding, self).__init__(256, **kwargs)
+        BasicEncoding.__init__(self, 256, **kwargs)
 
     def encode_input(self, inpt):
         return tools.string_to_bytes(inpt)
@@ -207,45 +229,47 @@ class StringEncoding(BasicEncoding):
     def empty(self):
         return ''
 
-class StringAlphabetEncoding(BasicEncoding):
-    def __init__(self, alphabet_size=26, **kwargs):
-        assert alphabet_size <= 26
-        super(StringAlphabetEncoding, self).__init__(alphabet_size, **kwargs)
-
-    def encode_char(self, c):
-        o = ord(c) - ord('a')
-        if not 0 <= o < self.alphabet_size:
-            raise ValueError('Expected char %s to be in alphabet size %s' % (c, self.alphabet-size))
-        return o
-
-    def encode_input(self, inpt):
-        return list(map(self.encode_char, inpt))
+class StringAlphabetEncoding(AlphabetEncoding, StringEncoding):
+    def __init__(self, alphabet, **kwargs):
+        AlphabetEncoding.__init__(self, alphabet, **kwargs)
 
     def decode_output(self, outpt):
         return ''.join(map(self.decode_num, outpt))
 
-    def decode_num(self, num):
-        return chr(num+ord('a'))
-
-    def empty(self):
-        return ''
-
 class TextFileEncoding(StringEncoding):
     def __init__(self, **kwargs):
-        super(TextFileEncoding, self).__init__(use_long=True, **kwargs)
+        StringEncoding.__init__(self, use_long=True, **kwargs)
 
     def encode_input_for_training(self, inpt):
         """
         Args:
-            inpt: A file handle
+            inpt: A file path
+        Returns:
+            encoded_inpt: A python iterable of numbers
         """
         return tools.file_to_bytes(inpt)
 
+class TextFileAlphabetEncoding(StringAlphabetEncoding, TextFileEncoding):
+    def __init__(self, path_for_alphabet, **kwargs):
+        alphabet = tools.file_to_alphabet(path_for_alphabet)
+        StringAlphabetEncoding.__init__(self, alphabet, use_long=True, **kwargs)
+
+    def encode_input_for_training(self, inpt):
+        """
+        Args:
+            inpt: A file path
+        Returns:
+            encoded_inpt: A python iterable of numbers
+        """
+        return map(self.encode_entry, tools.file_to_chars(inpt))
+
 encodings = {
     'basic': BasicEncoding,
+    'alphabet': AlphabetEncoding,
     'string': StringEncoding,
     'string-alphabet': StringAlphabetEncoding,
-    'text-file': TextFileEncoding
+    'text-file': TextFileEncoding,
+    'text-file-alphabet': TextFileAlphabetEncoding
 }
 
 class LSTMModelBase(object):
@@ -652,16 +676,28 @@ class LSTMModelEncoding(LSTMModelBase):
         self.init_from_file_or_encoding(encoding_name, *args, **kwargs)
 
 class LSTMModel(LSTMModelEncoding):
-    def __init__(self, name, alphabet_size, **kwargs):
-        super(LSTMModel, self).__init__(name, 'basic', alphabet_size, **kwargs)
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModel, self).__init__(name, 'basic', *args, **kwargs)
+
+class LSTMModelAlphabet(LSTMModelEncoding):
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModelAlphabet, self).__init__(name, 'alphabet', *args, **kwargs)
 
 class LSTMModelString(LSTMModelEncoding):
-    def __init__(self, name, **kwargs):
-        super(LSTMModelString, self).__init__(name, 'string', **kwargs)
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModelString, self).__init__(name, 'string', *args, **kwargs)
+
+class LSTMModelStringAlphabet(LSTMModelEncoding):
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModelStringAlphabet, self).__init__(name, 'string-alphabet', *args, **kwargs)
 
 class LSTMModelTextFile(LSTMModelEncoding):
-    def __init__(self, name, **kwargs):
-        super(LSTMModelTextFile, self).__init__(name, 'text-file', **kwargs)
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModelTextFile, self).__init__(name, 'text-file', *args, **kwargs)
+
+class LSTMModelTextFileAlphabet(LSTMModelEncoding):
+    def __init__(self, name, *args, **kwargs):
+        super(LSTMModelTextFileAlphabet, self).__init__(name, 'text-file-alphabet', *args, **kwargs)
 
 class LSTMModelFromFile(LSTMModelBase):
     def __init__(self, name, tag=None, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
