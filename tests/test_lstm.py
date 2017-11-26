@@ -175,12 +175,22 @@ def test_text_file(lstm_kwargs_1):
     model.analyze('ab')
     model.save_to_file()
 
-def test_text_file_alphabet(lstm_kwargs_1):
+def test_text_file_alphabet_file(lstm_kwargs_1):
     path = os.path.join(config.ROOT_DIR, 'tests', 'small.txt')
-    model = lstm.LSTMModelTextFileAlphabet('test-text-file-alphabet', path, **lstm_kwargs_1)
+    model = lstm.LSTMModelTextFileAlphabetFile('test-text-file-alphabet-file', path, **lstm_kwargs_1)
     model.train([path])
     s = model.sample('a')
     assert tools.is_string_or_bytes(s)
     print(s)
+    model.analyze('ab')
+    model.save_to_file()
+
+    model = lstm.LSTMModelFromFile('test-text-file-alphabet-file', **lstm_kwargs_1)
+    s = model.sample('a')
+    assert tools.is_string_or_bytes(s)
+    print(s)
+    model.analyze('ab')
+    model.train([path])
+    model.sample('a')
     model.analyze('ab')
     model.save_to_file()

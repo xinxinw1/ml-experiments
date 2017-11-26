@@ -309,7 +309,9 @@ def file_to_bytes(path):
     return flatmap(string_to_bytes, file_to_chars(path))
 
 def file_to_alphabet(path):
-    return set(file_to_chars(path))
+    lst = list(set(file_to_chars(path)))
+    lst.sort()
+    return lst
 
 def date_str():
     return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
