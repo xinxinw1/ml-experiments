@@ -7,7 +7,7 @@ import itertools
 import signal
 import os
 import glob
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def group(lst, n):
     """
@@ -374,3 +374,25 @@ def print_glob(glob_str):
     paths = sort_nicely(glob.glob(glob_str))
     for path in paths:
         print(path)
+
+def remove_microsecs(delta):
+    return delta - timedelta(microseconds=delta.microseconds)
+
+class TimeRemaining(object):
+    def __init__(self, total_steps, start_steps=0):
+        self.start_time = datetime.now()
+        self.total_steps = total_steps
+        self.start_steps = start_steps
+
+    def get_str(self, curr_steps):
+        curr_time = datetime.now()
+        time_passed = curr_time - self.start_time
+        steps_passed = curr_steps - self.start_steps
+        steps_remaining = self.total_steps - curr_steps
+        if steps_passed == 0:
+            return '?'
+        else:
+            time_per_step = time_passed / steps_passed
+            time_remaining = time_per_step * steps_remaining
+            time_remaining = remove_microsecs(time_remaining)
+            return str(time_remaining)

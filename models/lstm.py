@@ -579,11 +579,19 @@ class LSTMModelBase(object):
         batches = self.encoding.make_batches_for_training(inputs)
         return batches
 
-    def train(self, inputs, autosave=None, cont=False):
+    def train(self, inputs, autosave=None, cont=False, count=False):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
         """
+        if count:
+            logging.info('Counting enabled! This should only be used if inputs can be iterated over multiple times.')
+            logging.info('Counting number of steps...')
+            # Only use count if inputs and the items in it can be iterated over multiple times
+            count_batches = self.encode_and_make_batches_for_training(inputs)
+            total_round_steps = sum(1 for _ in count_batches)
+            logging.info('Number of steps is %s' % total_round_steps)
+
         batches = self.encode_and_make_batches_for_training(inputs)
         if cont:
             logging.info('Continuing enabled! Starting from round %s' % self.round_steps)
@@ -623,6 +631,8 @@ class LSTMModelBase(object):
                                 [self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
                         logging.info('Starting values: steps: %s round: %s loss_max: %s loss_mean: %s loss_min: %s'
                                 % (starting_i, starting_round, loss_max, loss_mean, loss_min))
+                        if count:
+                            time_rem = tools.TimeRemaining(total_round_steps, starting_round)
                     if i % 10 != 0:
                         _ = self._run_batch([self.optimize], batch, curr_states)
                     else:
@@ -631,8 +641,13 @@ class LSTMModelBase(object):
                         summary_writer.add_summary(summary, i)
                         # Note: The printed numbers are the numbers from before the optimization update happens
                         # Note: Step numbers start from 1
-                        logging.info('Step %s, round %s: loss_max: %s loss_mean: %s loss_min: %s'
-                                % (i, self.round_steps, loss_max, loss_mean, loss_min))
+                        if count:
+                            time_rem_str = time_rem.get_str(self.round_steps)
+                            logging.info('Step %s round %s/%s: loss max: %s mean: %s min: %s time rem: %s'
+                                    % (i, self.round_steps, total_round_steps, loss_max, loss_mean, loss_min, time_rem_str))
+                        else:
+                            logging.info('Step %s round %s: loss max: %s mean: %s min: %s'
+                                    % (i, self.round_steps, loss_max, loss_mean, loss_min))
                         #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                         #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                     # curr_states = new_states

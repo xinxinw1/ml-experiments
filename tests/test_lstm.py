@@ -49,6 +49,9 @@ def test_simple_short(lstm_kwargs_1, lstm_kwargs_2):
     model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_2)
     model.train([[1, 0]] * 1000, autosave=30)
 
+    model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_2)
+    model.train([[1, 0]] * 1000, autosave=30, count=True)
+
     model = lstm.LSTMModelFromFile('test-simple-copy', from_name='test-simple', training_steps=100, **lstm_kwargs_1)
     model.train([[1, 0]] * 1000, autosave=30)
 
