@@ -2,9 +2,10 @@
 
 set -eu -o pipefail
 
+server="$1"
+name="$2"
 curr_branch="$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)"
-script=train_simple_long.py
-name=simple-long
+script="./train/$name.py"
 tag="$(cat config.tag.txt)"
 date_str="$(date '+%Y-%m-%d_%H-%M-%S')"
 
@@ -20,7 +21,7 @@ fi
 
 mkdir -p "saved_logs/$name/$tag"
 
-ssh -T -i "~/.ssh/canada-central.pem" "$1" 2>&1 <<ENDSSH | tee saved_logs/$name/$tag/$1
+ssh -T -i "~/.ssh/canada-central.pem" "$server" 2>&1 <<ENDSSH | tee "saved_logs/$name/$tag/$server"
 set -e
 if [ ! -d "miniconda3" ]; then
     wget -q https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -59,10 +60,10 @@ if [ ! -d "data" ]; then
     wget -q http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
     cd ..
 fi
-./scripts/$script
+$script
 ENDSSH
 
 mkdir -p "saved_summaries/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$1:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
 mkdir -p "saved_models/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$1:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
