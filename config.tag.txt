@@ -1,1 +1,1 @@
-test
+state-768-layers-2-batch-4-width-100
