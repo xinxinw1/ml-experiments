@@ -664,7 +664,7 @@ class LSTMModelBase(object):
             if autosave is not None and (autosave is True or i % autosave != 0):
                 # Save the last one only if it hasn't already been saved
                 self.save_to_file()
-            raise
+            tools.exit(22)
         else:
             self.round_steps = 0
             logging.info('Saved summaries to %s' % summaries_dir)

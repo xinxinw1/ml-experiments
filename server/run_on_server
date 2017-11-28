@@ -23,9 +23,14 @@ mkdir -p "saved_logs/$name/$tag"
 
 commit="$(git rev-parse HEAD)"
 url="https://raw.githubusercontent.com/xinxinw1/ml-experiments/$commit/server/server_script"
-ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic 'rm -rf server_script*; wget -q $url; chmod a+x server_script; ./server_script $curr_branch $script'" | tee "saved_logs/$name/$tag/$server"
+ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic 'set -e; rm -rf server_script*; wget $url; chmod a+x server_script; ./server_script $curr_branch $script'" | tee "saved_logs/$name/$tag/$server"
+# Status will be 22 if KeyboardInterrupt occurred
+script_status=${PIPESTATUS[0]}
+echo "Script status: $script_status"
 
-mkdir -p "saved_summaries/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
-mkdir -p "saved_models/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
+if [ "$script_status" == "22" ] || [ "$script_status" == "0" ]; then
+    mkdir -p "saved_summaries/$name"
+    scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
+    mkdir -p "saved_models/$name"
+    scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
+fi

@@ -6,6 +6,7 @@ import numpy as np
 import itertools
 import signal
 import os
+import sys
 import glob
 from datetime import datetime, timedelta
 
@@ -396,3 +397,6 @@ class TimeRemaining(object):
             time_remaining = time_per_step * steps_remaining
             time_remaining = remove_microsecs(time_remaining)
             return str(time_remaining)
+
+def exit(code):
+    sys.exit(code)
