@@ -21,7 +21,7 @@ fi
 
 mkdir -p "saved_logs/$name/$tag"
 
-ssh -i "~/.ssh/canada-central.pem" "$server" "bash -ic 'rm -rf server_script; wget https://raw.githubusercontent.com/xinxinw1/ml-experiments/master/server/server_script; chmod a+x server_script; ./server_script $curr_branch $script'"
+ssh -i "~/.ssh/canada-central.pem" "$server" "bash -ic 'rm -rf server_script*; wget https://raw.githubusercontent.com/xinxinw1/ml-experiments/master/server/server_script; chmod a+x server_script; cat server_script; ls -la; ./server_script $curr_branch $script'"
 
 mkdir -p "saved_summaries/$name"
 scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
