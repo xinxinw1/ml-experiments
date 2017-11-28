@@ -579,7 +579,7 @@ class LSTMModelBase(object):
         batches = self.encoding.make_batches_for_training(inputs)
         return batches
 
-    def train(self, inputs, autosave=None, cont=False, count=False):
+    def train(self, inputs, autosave=None, cont=False, count=False, save_graph=True):
         """
         Args:
             inputs: A python iterable of things that encode to python iterables (if long) or lists (if short) of numbers
@@ -606,7 +606,12 @@ class LSTMModelBase(object):
 
         summaries_dir = save_dir
         logging.info('Using summaries dir %s' % summaries_dir)
-        summary_writer = tf.summary.FileWriter(summaries_dir, self.graph)
+        if save_graph and self.training_steps == 0:
+            logging.info('Saving graph...')
+            # Only write graph during the first training attempt
+            summary_writer = tf.summary.FileWriter(summaries_dir, self.graph)
+        else:
+            summary_writer = tf.summary.FileWriter(summaries_dir)
 
         logging.info('Starting training...')
         curr_states = None
@@ -651,12 +656,12 @@ class LSTMModelBase(object):
                         #losses, probabilities = self.sess.run([self.losses, self.probabilities], feed_dict={self.inputs: batch})
                         #logging.info('Step %s: losses: %s probs: %s' % (i, losses, probabilities))
                     # curr_states = new_states
-                    if autosave is not None and i % autosave == 0:
+                    if autosave is not None and (autosave is not True and i % autosave == 0):
                         self.save_to_file()
         except KeyboardInterrupt:
             logging.info('Cancelling training...')
             logging.info('Saved summaries to %s' % summaries_dir)
-            if autosave is not None and i % autosave != 0:
+            if autosave is not None and (autosave is True or i % autosave != 0):
                 # Save the last one only if it hasn't already been saved
                 self.save_to_file()
             raise

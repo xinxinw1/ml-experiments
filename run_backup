@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+
+set -eu
+
+date_str="$(date '+%Y-%m-%d_%H-%M-%S')"
+
+echo "Running backup..."
+
+mkdir -p backup
+cp -r saved_summaries backup/saved_summaries_"$date_str"
+cp -r saved_models backup/saved_models_"$date_str"
+

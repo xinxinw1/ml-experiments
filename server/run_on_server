@@ -1,0 +1,68 @@
+#!/usr/bin/bash
+
+set -eu -o pipefail
+
+curr_branch="$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)"
+script=train_simple_long.py
+name=simple-long
+tag="$(cat config.tag.txt)"
+date_str="$(date '+%Y-%m-%d_%H-%M-%S')"
+
+if [ -d "saved_summaries/$name/$tag" ]; then
+    echo "saved_summaries/$name/$tag already exists on local, aborting!"
+    exit 1
+fi
+
+if [ -d "saved_models/$name/$tag" ]; then
+    echo "saved_models/$name/$tag already exists on local, aborting!"
+    exit 1
+fi
+
+mkdir -p "saved_logs/$name/$tag"
+
+ssh -T -i "~/.ssh/canada-central.pem" "$1" 2>&1 <<ENDSSH | tee saved_logs/$name/$tag/$1
+set -e
+if [ ! -d "miniconda3" ]; then
+    wget -q https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    chmod a+x Miniconda3-latest-Linux-x86_64.sh
+    echo "q
+    yes
+
+    yes" | ./Miniconda3-latest-Linux-x86_64.sh
+    export PATH="~/miniconda3/bin:\$PATH"
+    echo "y
+    " | conda create -n tensorflow python=3.5
+    source activate tensorflow
+    pip install https://github.com/lakshayg/tensorflow-build/raw/master/tensorflow-1.4.0-cp35-cp35m-linux_x86_64.whl
+else
+    export PATH="~/miniconda3/bin:\$PATH"
+    source activate tensorflow
+fi
+if [ ! -d "ml-experiments" ]; then
+    git clone https://github.com/xinxinw1/ml-experiments.git
+fi
+cd ml-experiments
+if [ -d "saved_summaries/$name/$tag" ]; then
+    echo "saved_summaries/$name/$tag already exists on remote, aborting!"
+    exit 1
+fi
+if [ -d "saved_models/$name/$tag" ]; then
+    echo "saved_models/$name/$tag already exists on remote, aborting!"
+    exit 1
+fi
+git fetch
+git checkout $curr_branch
+git pull
+if [ ! -d "data" ]; then
+    mkdir data
+    cd data
+    wget -q http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
+    cd ..
+fi
+./scripts/$script
+ENDSSH
+
+mkdir -p "saved_summaries/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$1:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
+mkdir -p "saved_models/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$1:ml-experiments/saved_models/$name/$tag" "saved_models/$name"

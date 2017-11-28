@@ -1,0 +1,9 @@
+#!/usr/bin/bash
+
+set -eu
+
+echo "Deleting everything from server $1..."
+ssh -T -i "~/.ssh/canada-central.pem" $1 <<ENDSSH
+set -e
+rm -rf miniconda3 ml-experiments Miniconda3-*
+ENDSSH
