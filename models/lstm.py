@@ -629,7 +629,7 @@ class LSTMModelBase(object):
                     if i-1 == starting_i:
                         loss_max, loss_mean, loss_min = self._run_batch(
                                 [self.loss_max, self.loss_mean, self.loss_min], batch, curr_states)
-                        logging.info('Starting values: steps: %s round: %s loss_max: %s loss_mean: %s loss_min: %s'
+                        logging.info('Starting values: steps: %s round: %s loss max: %s mean: %s min: %s'
                                 % (starting_i, starting_round, loss_max, loss_mean, loss_min))
                         if count:
                             time_rem = tools.TimeRemaining(total_round_steps, starting_round)
