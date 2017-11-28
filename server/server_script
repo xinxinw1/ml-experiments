@@ -25,9 +25,9 @@ if [ ! -d "ml-experiments" ]; then
     git clone https://github.com/xinxinw1/ml-experiments.git
 fi
 cd ml-experiments
-git fetch
-git checkout $branch
-git pull
+git fetch >/dev/null
+git checkout $branch >/dev/null
+git reset --hard origin/$branch >/dev/null
 if [ ! -d "data" ]; then
     mkdir data
     cd data
