@@ -26,6 +26,7 @@ if [ ! -d "ml-experiments" ]; then
 fi
 cd ml-experiments
 git fetch >/dev/null
+git reset --hard HEAD >/dev/null
 git checkout $branch >/dev/null
 git reset --hard origin/$branch >/dev/null
 if [ ! -d "data" ]; then
