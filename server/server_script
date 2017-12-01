@@ -1,6 +1,13 @@
 #!/bin/bash
 
-set -e
+do_exit() {
+    code=$?
+    echo Exiting with code: $code
+    echo $code > ~/exit_code
+    exit $code
+}
+
+trap do_exit ERR
 
 branch="$1"
 script="$2"

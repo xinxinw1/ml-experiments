@@ -23,7 +23,13 @@ mkdir -p "saved_logs/$name/$tag"
 
 commit="$(git rev-parse HEAD)"
 url="https://raw.githubusercontent.com/xinxinw1/ml-experiments/$commit/server/server_script"
-ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic 'set -e; rm -rf server_script*; wget $url; chmod a+x server_script; ./server_script $curr_branch $script'" | tee "saved_logs/$name/$tag/$server"
+ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
+    'set -e; rm -rf server_script* exit_code screenlog.0; wget $url; chmod a+x server_script; \
+    ls -la; cat server_script; \
+    screen -L -r exp-$name-$tag || screen -L -S exp-$name-$tag ./server_script $curr_branch $script; \
+    cat screenlog.0; \
+    exit \$(cat exit_code)'" \
+    | tee -a "saved_logs/$name/$tag/$server"
 # Status will be 22 if KeyboardInterrupt occurred
 script_status=${PIPESTATUS[0]}
 echo "Script status: $script_status"
