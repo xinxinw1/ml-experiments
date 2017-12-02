@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+
+set -u
+
+name="$1"
+tag="$(cat config.tag.txt)"
+
+if [ -d "saved_summaries/$name/$tag" ]; then
+    echo "saved_summaries/$name/$tag already exists on local, aborting!"
+    exit 1
+fi
+
+if [ -d "saved_models/$name/$tag" ]; then
+    echo "saved_models/$name/$tag already exists on local, aborting!"
+    exit 1
+fi

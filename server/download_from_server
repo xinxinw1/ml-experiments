@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+
+set -u
+
+name="$1"
+server="$2"
+tag="$(cat config.tag.txt)"
+
+./server/check_saved_exists "$name"
+
+mkdir -p "saved_summaries/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
+mkdir -p "saved_models/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"

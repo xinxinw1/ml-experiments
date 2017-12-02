@@ -2,7 +2,7 @@
 
 do_exit() {
     code=$?
-    echo Exiting with code: $code
+    echo Server script exit code: $code
     echo $code > ~/exit_code
     exit $code
 }
@@ -44,3 +44,4 @@ if [ ! -d "data" ]; then
 fi
 rm -rf saved_models saved_summaries
 "$script"
+do_exit

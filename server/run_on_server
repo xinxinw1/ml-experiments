@@ -1,5 +1,6 @@
 #!/usr/bin/bash
 
+set -e
 set -u
 
 name="$1"
@@ -7,36 +8,38 @@ server="$2"
 curr_branch="$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)"
 script="./train/$name.py"
 tag="$(cat config.tag.txt)"
-date_str="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-if [ -d "saved_summaries/$name/$tag" ]; then
-    echo "saved_summaries/$name/$tag already exists on local, aborting!"
-    exit 1
-fi
-
-if [ -d "saved_models/$name/$tag" ]; then
-    echo "saved_models/$name/$tag already exists on local, aborting!"
-    exit 1
-fi
+./server/check_saved_exists "$name"
 
 mkdir -p "saved_logs/$name/$tag"
 
 commit="$(git rev-parse HEAD)"
 url="https://raw.githubusercontent.com/xinxinw1/ml-experiments/$commit/server/server_script"
 ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
-    'set -e; rm -rf server_script* exit_code screenlog.0; wget $url; chmod a+x server_script; \
-    ls -la; cat server_script; \
-    screen -L -r exp-$name-$tag || screen -L -S exp-$name-$tag ./server_script $curr_branch $script; \
-    cat screenlog.0; \
-    exit \$(cat exit_code)'" \
+    '
+    screen -S exp-$name-$tag -Q select . ;
+    ret_code=\$?;
+    echo Code: \$ret_code;
+    set -e;
+    if [[ \$ret_code -ne 0 ]]; then
+        rm -rf server_script* exit_code screenlog.0;
+        wget $url; \
+        chmod a+x server_script; \
+        ls -la; cat server_script; \
+        screen -L -S exp-$name-$tag ./server_script $curr_branch $script; \
+        cat screenlog.0; \
+        exit \$(cat exit_code); \
+    else \
+        exit 23; \
+    fi; \
+    '" \
     | tee -a "saved_logs/$name/$tag/$server"
 # Status will be 22 if KeyboardInterrupt occurred
 script_status=${PIPESTATUS[0]}
-echo "Script status: $script_status"
+echo "SSH shell exit code: $script_status"
 
 if [ "$script_status" == "22" ] || [ "$script_status" == "0" ]; then
-    mkdir -p "saved_summaries/$name"
-    scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
-    mkdir -p "saved_models/$name"
-    scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
+    ./server/download_from_server "$name" "$server"
+elif [ "$script_status" == "23" ]; then
+    echo "Session already running. Use continue_on_server"
 fi
