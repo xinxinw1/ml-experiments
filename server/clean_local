@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+
+set -e
+set -u
+
+name="$1"
+tag="$2"
+
+echo "Deleting saved models and summaries for name $name and tag $tag from local"
+read -p "Are you sure? " -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    rm -rv saved_models/$name/$tag saved_summaries/$name/$tag
+fi

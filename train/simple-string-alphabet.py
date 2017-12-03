@@ -4,6 +4,6 @@ import setup
 
 from models import lstm
 
-model = lstm.LSTMModelEncoding('simple-string-alphabet', 'string-alphabet', 'ab')
+model = lstm.LSTMModelEncoding('simple-string-alphabet', 'string-alphabet', 'ab', tag=setup.tag)
 model.train(['ab'] * 10000)
 model.save_to_file()

@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+
+set -e
+set -u
+
+name="$1"
+tag="$2"
+server="$3"
+
+echo "Deleting saved models and summaries for name $name and tag $tag from server $server"
+read -p "Are you sure? " -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    ssh -T -i "~/.ssh/canada-central.pem" "$server" <<ENDSSH
+set -e
+if [ -d "ml-experiments" ]; then
+    cd ml-experiments
+    rm -rv saved_models/$name/$tag saved_summaries/$name/$tag
+fi
+ENDSSH
+fi

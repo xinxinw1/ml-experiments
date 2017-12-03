@@ -6,3 +6,4 @@ saved_logs
 .cache
 data
 backup
+experiments.json

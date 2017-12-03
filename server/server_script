@@ -1,25 +1,25 @@
 #!/bin/bash
 
-# Can't use set -u because conda breaks
+set -u
+commit="$1"
+name="$2"
+tag="$3"
+script="./train/$name.py"
 
 do_exit() {
-    set -u
     code=$?
+    set -u
     if [ "$code" == "0" ]; then
         code=$1
     fi
     echo Server script exit code: $code
-    echo $code > ~/exit_code
+    echo $code > ~/exit_code_$name-$tag
     exit $code
 }
 
 trap do_exit ERR
 
-branch="$1"
-name="$2"
-tag="$3"
-script="./train/$name.py"
-
+set +u
 if [ ! -d "miniconda3" ]; then
     wget -q https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
     chmod a+x Miniconda3-latest-Linux-x86_64.sh
@@ -36,14 +36,14 @@ else
     export PATH="~/miniconda3/bin:$PATH"
     source activate tensorflow
 fi
+set -u
 if [ ! -d "ml-experiments" ]; then
     git clone https://github.com/xinxinw1/ml-experiments.git
 fi
 cd ml-experiments
 git fetch >/dev/null
 git reset --hard HEAD >/dev/null
-git checkout $branch >/dev/null
-git reset --hard origin/$branch >/dev/null
+git checkout $commit >/dev/null
 if [ ! -d "data" ]; then
     mkdir data
     cd data
@@ -52,12 +52,12 @@ if [ ! -d "data" ]; then
 fi
 if [ -d "saved_summaries/$name/$tag" ]; then
     echo "saved_summaries/$name/$tag already exists on server, aborting!"
-    do_exit 1
+    do_exit 25
 fi
 
 if [ -d "saved_models/$name/$tag" ]; then
     echo "saved_models/$name/$tag already exists on server, aborting!"
-    do_exit 1
+    do_exit 25
 fi
-"$script"
+"$script" "$tag"
 do_exit 0

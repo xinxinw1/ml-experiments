@@ -1,0 +1,14 @@
+[
+    {
+        "name": "count-1-0",
+        "tag": "test",
+        "commit": "master",
+        "server": "ubuntu@ec2-35-182-83-148.ca-central-1.compute.amazonaws.com"
+    },
+    {
+        "name": "shakespeare",
+        "tag": "state-768-layers-2",
+        "commit": "exp-state-768-layers-2",
+        "server": "ubuntu@ec2-35-182-83-148.ca-central-1.compute.amazonaws.com"
+    }
+]
