@@ -12,7 +12,10 @@ with open('experiments.json', 'r') as f:
         experiments[(experiment['name'], experiment['tag'])] = experiment
 
 def exec_list(args):
-    pprint.pprint(experiments_json)
+    format_str = '%-15s %-20s %-25s %s'
+    print(format_str % ('name', 'tag', 'commit', 'server'))
+    for experiment in experiments_json:
+        print(format_str % (experiment['name'], experiment['tag'], experiment['commit'], experiment['server']))
 
 def exec_run(args):
     tag = args.tag
