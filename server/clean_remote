@@ -11,11 +11,5 @@ echo "Deleting saved models and summaries for name $name and tag $tag from serve
 read -p "Are you sure? " -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    ssh -T -i "~/.ssh/canada-central.pem" "$server" <<ENDSSH
-set -e
-if [ -d "ml-experiments" ]; then
-    cd ml-experiments
-    rm -rv saved_models/$name/$tag saved_summaries/$name/$tag
-fi
-ENDSSH
+    ./server/clean_remote_no_prompt "$name" "$tag" "$server"
 fi

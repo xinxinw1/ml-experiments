@@ -22,19 +22,23 @@ ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
     echo Code: \$ret_code;
     set -e;
     if [[ \$ret_code -ne 0 ]]; then
-        rm -rf server_script* exit_code_$name-$tag screenlog.0;
-        wget $url; \
-        chmod a+x server_script; \
-        ls -la; cat server_script; \
-        screen -L -S exp-$name-$tag ./server_script $commit $name $tag; \
-        cat screenlog.0; \
-        exit \$(cat exit_code_$name-$tag); \
-    else \
-        exit 23; \
-    fi; \
+        rm -rf server_script* exit_code_$name-$tag;
+        wget $url;
+        chmod a+x server_script;
+        ls -la; cat server_script;
+        echo logfile screenlog_$name-$tag.log > screen_$name-$tag.conf
+        screen -c screen_$name-$tag.conf -L -S exp-$name-$tag ./server_script $commit $name $tag;
+        cat screenlog_$name-$tag.log;
+        exit \$(cat exit_code_$name-$tag);
+    else
+        exit 23;
+    fi;
     '" \
     | tee -a "saved_logs/$name/$tag/$server"
-# Status will be 22 if KeyboardInterrupt occurred
+# Status codes:
+# 22: KeyboardInterrupt occurred
+# 23: Screen session already running
+# 24: No session running and saved files exist
 script_status=${PIPESTATUS[0]}
 echo "SSH shell exit code: $script_status"
 
@@ -47,7 +51,7 @@ elif [ "$script_status" == "23" ]; then
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         ./server/continue_on_server "$name" "$tag" "$server"
     fi
-elif [ "$script_status" == "25" ]; then
+elif [ "$script_status" == "24" ]; then
     echo "Session not running and saved files exist on server."
     read -p "Do you want to download them? " -r
     echo

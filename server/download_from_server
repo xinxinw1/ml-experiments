@@ -6,18 +6,13 @@ set -u
 name="$1"
 tag="$2"
 server="$3"
+git_dir_name="ml-experiments_$name-$tag"
 
 ./server/check_saved_exists "$name" "$tag"
 
 mkdir -p "saved_summaries/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_summaries/$name/$tag" "saved_summaries/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:$git_dir_name/saved_summaries/$name/$tag" "saved_summaries/$name"
 mkdir -p "saved_models/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:ml-experiments/saved_models/$name/$tag" "saved_models/$name"
+scp -r -i "~/.ssh/canada-central.pem" "$server:$git_dir_name/saved_models/$name/$tag" "saved_models/$name"
 echo "Deleting downloaded files from server..."
-ssh -T -i "~/.ssh/canada-central.pem" "$server" <<ENDSSH
-set -e
-if [ -d "ml-experiments" ]; then
-    cd ml-experiments
-    rm -rv saved_models/$name/$tag saved_summaries/$name/$tag
-fi
-ENDSSH
+./server/clean_remote_no_prompt "$name" "$tag" "$server"

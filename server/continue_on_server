@@ -6,6 +6,7 @@ set -u
 name="$1"
 tag="$2"
 server="$3"
+git_dir_name="ml-experiments_$name-$tag"
 
 ./server/check_saved_exists "$name" "$tag"
 
@@ -14,17 +15,20 @@ mkdir -p "saved_logs/$name/$tag"
 ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
     'ls -la;
     if ! screen -L -r exp-$name-$tag; then
-        if [ -d ml-experiments/saved_models/$name/$tag ]; then
+        if [ -d $git_dir_name/saved_models/$name/$tag ]; then
             exit 24;
         else
             exit 1;
         fi
     fi;
     set -e;
-    cat screenlog.0;
+    cat screenlog_$name-$tag.log;
     exit \$(cat exit_code_$name-$tag)'" \
     | tee -a "saved_logs/$name/$tag/$server"
-# Status will be 22 if KeyboardInterrupt occurred
+# Status codes:
+# 22: KeyboardInterrupt occurred
+# 23: Screen session already running
+# 24: No session running and saved files exist
 script_status=${PIPESTATUS[0]}
 echo "SSH shell exit code: $script_status"
 

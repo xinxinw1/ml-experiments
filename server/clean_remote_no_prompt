@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+
+set -e
+set -u
+
+name="$1"
+tag="$2"
+server="$3"
+git_dir_name="ml-experiments_$name-$tag"
+
+ssh -T -i "~/.ssh/canada-central.pem" "$server" <<ENDSSH
+set -e
+rm -rv $git_dir_name/saved_models/$name/$tag $git_dir_name/saved_summaries/$name/$tag
+ENDSSH
