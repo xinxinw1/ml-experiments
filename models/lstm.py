@@ -367,7 +367,7 @@ class LSTMModelBase(object):
             # inputs_one_hot is a list of batches where each batch is a list of one hot encoded lists
             # inputs_one_hot is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
 
-            self.state_sizes = [2*self.effective_alphabet_size] * 1
+            self.state_sizes = [2048] * 1
 
             # def make_init_state(i, state_size):
             #     return tf.placeholder(tf.float32, [2, None, state_size], name='init_state_' + str(i))
