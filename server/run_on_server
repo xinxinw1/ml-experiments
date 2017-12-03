@@ -26,7 +26,7 @@ ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
         wget $url; \
         chmod a+x server_script; \
         ls -la; cat server_script; \
-        screen -L -S exp-$name-$tag ./server_script $curr_branch $script; \
+        screen -L -S exp-$name-$tag ./server_script $curr_branch $name $tag; \
         cat screenlog.0; \
         exit \$(cat exit_code); \
     else \

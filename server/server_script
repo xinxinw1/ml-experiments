@@ -1,7 +1,13 @@
 #!/bin/bash
 
+# Can't use set -u because conda breaks
+
 do_exit() {
+    set -u
     code=$?
+    if [ "$code" == "0" ]; then
+        code=$1
+    fi
     echo Server script exit code: $code
     echo $code > ~/exit_code
     exit $code
@@ -10,7 +16,9 @@ do_exit() {
 trap do_exit ERR
 
 branch="$1"
-script="$2"
+name="$2"
+tag="$3"
+script="./train/$name.py"
 
 if [ ! -d "miniconda3" ]; then
     wget -q https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -42,6 +50,14 @@ if [ ! -d "data" ]; then
     wget -q http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
     cd ..
 fi
-rm -rf saved_models saved_summaries
+if [ -d "saved_summaries/$name/$tag" ]; then
+    echo "saved_summaries/$name/$tag already exists on server, aborting!"
+    do_exit 1
+fi
+
+if [ -d "saved_models/$name/$tag" ]; then
+    echo "saved_models/$name/$tag already exists on server, aborting!"
+    do_exit 1
+fi
 "$script"
-do_exit
+do_exit 0
