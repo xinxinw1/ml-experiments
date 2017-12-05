@@ -6,6 +6,7 @@ date_str="$(date '+%Y-%m-%d_%H-%M-%S')"
 
 echo "Running backup..."
 
-mkdir -p backup
+mkdir -p "backup/$date_str"
 for i in saved_summaries saved_models saved_logs; do
-    cp -r "$i" "backup/$date_str/$i"
+    cp -rv "$i" "backup/$date_str/$i"
+done
