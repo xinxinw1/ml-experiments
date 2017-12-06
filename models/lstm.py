@@ -60,6 +60,15 @@ class Encoding(ABC):
         """
         pass
 
+    def count_batches_for_training(self, encoded_inputs):
+        """
+        Args:
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        Returns:
+            count: An integer that is the number of batches
+        """
+        pass
+
     @abstractmethod
     def make_input_for_sample(self, encoded_inpt):
         """
@@ -169,6 +178,18 @@ class BasicEncoding(Encoding):
             encoded_inputs = tools.flat(encoded_inputs)
         batches = self.batch_maker.make_batches_for_training(encoded_inputs)
         return batches
+
+    def count_batches_for_training(self, encoded_inputs):
+        """
+        Args:
+            encoded_inputs: A python iterable of python iterables (if long) or lists (if short) of numbers
+        Returns:
+            count: An integer that is the number of batches
+        """
+        if self.use_long:
+            encoded_inputs = tools.flat(encoded_inputs)
+        count = self.batch_maker.count_batches_for_training(encoded_inputs)
+        return count
 
     def make_input_for_sample(self, encoded_inpt):
         """
@@ -579,6 +600,11 @@ class LSTMModelBase(object):
         batches = self.encoding.make_batches_for_training(inputs)
         return batches
 
+    def encode_and_count_batches_for_training(self, inputs):
+        inputs = map(self.encoding.encode_input_for_training, inputs)
+        count = self.encoding.count_batches_for_training(inputs)
+        return count
+
     def train(self, inputs, autosave=None, cont=False, count=False, save_graph=True):
         """
         Args:
@@ -588,8 +614,7 @@ class LSTMModelBase(object):
             logging.info('Counting enabled! This should only be used if inputs can be iterated over multiple times.')
             logging.info('Counting number of steps...')
             # Only use count if inputs and the items in it can be iterated over multiple times
-            count_batches = self.encode_and_make_batches_for_training(inputs)
-            total_round_steps = sum(1 for _ in count_batches)
+            total_round_steps = self.encode_and_count_batches_for_training(inputs)
             logging.info('Number of steps is %s' % total_round_steps)
 
         batches = self.encode_and_make_batches_for_training(inputs)

@@ -131,6 +131,9 @@ def make_batches_long(inputs, max_batch_size, max_batch_width, pad_item):
     labels_batches_it = make_batch_half_with_it_of_nums(labels_it, max_batch_size, max_batch_width, pad_item)
     return zip(inputs_batches_it, labels_batches_it)
 
+def len_iter(it):
+    return sum(1 for _ in it)
+
 class LongBatchMaker(object):
     def __init__(self, max_batch_size, max_batch_width, pad_item, skip_padding=False):
         logging.info('Using skip padding %s' % skip_padding)
@@ -177,6 +180,15 @@ class LongBatchMaker(object):
                     batch_index += 1
                     in_batch_index = 0
                 yield (self.inputs_array[:batch_index], self.labels_array[:batch_index])
+
+    def count_batches_for_training(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of numbers. inputs cannot be an iterator!
+        Returns:
+            count: An integer that is the number of batches that will be returned
+        """
+        return math.ceil(len_iter(inputs)/(self.max_batch_size*self.max_batch_width))
 
     def make_input_for_sample(self, inpt):
         """
