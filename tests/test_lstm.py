@@ -118,7 +118,7 @@ def test_simple_string_alphabet_short(lstm_kwargs_1):
 
 def test_simple_long(lstm_kwargs_1):
     model = lstm.LSTMModel('test-simple-long', 2, use_long=True, **lstm_kwargs_1)
-    model.train([[1, 0] * 1000])
+    model.train([[1, 0] * 6000])
     s = model.sample([1])
     assert isinstance(s, list)
     print(s)
@@ -131,12 +131,13 @@ def test_simple_long(lstm_kwargs_1):
     assert isinstance(s, list)
     print(s)
     model.analyze([1, 0])
-    model.train([[1, 0] * 1000])
+    model.train([[1, 0] * 6000])
     model.sample([1])
     model.analyze([1, 0])
     model.save_to_file()
 
     model.train([[1, 0]])
+    model.train([[1, 0] * 6000], count=True)
 
 def test_simple_long_skip_padding(lstm_kwargs_1):
     model = lstm.LSTMModel('test-simple-long', 2, use_long=True, skip_padding=True, **lstm_kwargs_1)

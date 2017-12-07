@@ -229,6 +229,15 @@ class ShortBatchMaker(object):
         return make_batches_with_start_end(inputs, self.max_batch_size,
                 self.token_item, self.pad_item)
 
+    def count_batches_for_training(self, inputs):
+        """
+        Args:
+            inputs: A python iterable of python lists of numbers
+        Returns:
+            count: An integer that is the number of batches that will be returned
+        """
+        return math.ceil(len_iter(inputs)/self.max_batch_size)
+
     def make_input_for_sample(self, inpt):
         """
         Args:
