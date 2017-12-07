@@ -1,24 +1,12 @@
 #!/bin/bash
 
 set -u
+set -e
+
 commit="$1"
 name="$2"
 tag="$3"
-script="./train/$name.py"
 git_dir_name="ml-experiments_$name-$tag"
-
-do_exit() {
-    code=$?
-    set -u
-    if [ "$code" == "0" ]; then
-        code=$1
-    fi
-    echo Server script exit code: $code
-    echo $code > ~/exit_code_$name-$tag
-    exit $code
-}
-
-trap do_exit ERR
 
 set +u
 if [ ! -d "miniconda3" ]; then
@@ -51,14 +39,5 @@ if [ ! -d "data" ]; then
     wget -q http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
     cd ..
 fi
-if [ -d "saved_summaries/$name/$tag" ]; then
-    echo "saved_summaries/$name/$tag already exists on server, aborting!"
-    do_exit 24
-fi
-
-if [ -d "saved_models/$name/$tag" ]; then
-    echo "saved_models/$name/$tag already exists on server, aborting!"
-    do_exit 24
-fi
-"$script" "$tag"
-do_exit 0
+mkdir -p "saved_summaries/$name"
+mkdir -p "saved_models/$name"

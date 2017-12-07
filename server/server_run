@@ -1,0 +1,33 @@
+#!/bin/bash
+
+set -u
+commit="$1"
+name="$2"
+tag="$3"
+script="./train/$name.py"
+git_dir_name="ml-experiments_$name-$tag"
+
+do_exit() {
+    code=$?
+    set -u
+    if [ "$code" == "0" ]; then
+        code=$1
+    fi
+    echo Server script exit code: $code
+    echo $code > ~/exit_code_$name-$tag
+    exit $code
+}
+
+trap do_exit ERR
+
+./server_setup "$commit" "$name" "$tag"
+./server_check_exists "$name" "$tag"
+
+set +u
+export PATH="~/miniconda3/bin:$PATH"
+source activate tensorflow
+set -u
+
+cd "$git_dir_name"
+"$script" "$tag"
+do_exit 0

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -u
+set -e
+
+name="$1"
+tag="$2"
+git_dir_name="ml-experiments_$name-$tag"
+
+cd "$git_dir_name"
+
+if [ -d "saved_summaries/$name/$tag" ]; then
+    echo "saved_summaries/$name/$tag already exists on server, aborting!"
+    exit 24
+fi
+
+if [ -d "saved_models/$name/$tag" ]; then
+    echo "saved_models/$name/$tag already exists on server, aborting!"
+    exit 24
+fi

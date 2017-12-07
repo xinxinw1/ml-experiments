@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+
+set -e
+set -u
+
+name="$1"
+tag="$2"
+commitish="$3"
+commit="$(git rev-parse "$commitish")"
+server="$4"
+git_dir_name="ml-experiments_$name-$tag"
+cp_cmd=(rsync -av --progress -e "ssh -i ~/.ssh/canada-central.pem")
+
+scp -i "~/.ssh/canada-central.pem" server/server_* "$server":.
+ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
+    '
+    set -e;
+    ./server_setup $commit $name $tag;
+    ./server_check_exists $name $tag;
+    '"
+
+"${cp_cmd[@]}" "saved_summaries/$name/$tag" "$server:$git_dir_name/saved_summaries/$name"
+"${cp_cmd[@]}" "saved_models/$name/$tag" "$server:$git_dir_name/saved_models/$name"

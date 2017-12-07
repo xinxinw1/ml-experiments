@@ -7,12 +7,13 @@ name="$1"
 tag="$2"
 server="$3"
 git_dir_name="ml-experiments_$name-$tag"
+cp_cmd=(rsync -av --progress -e "ssh -i ~/.ssh/canada-central.pem")
 
 ./server/check_saved_exists "$name" "$tag"
 
 mkdir -p "saved_summaries/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:$git_dir_name/saved_summaries/$name/$tag" "saved_summaries/$name"
+"${cp_cmd[@]}" "$server:$git_dir_name/saved_summaries/$name/$tag" "saved_summaries/$name"
 mkdir -p "saved_models/$name"
-scp -r -i "~/.ssh/canada-central.pem" "$server:$git_dir_name/saved_models/$name/$tag" "saved_models/$name"
+"${cp_cmd[@]}" "$server:$git_dir_name/saved_models/$name/$tag" "saved_models/$name"
 echo "Deleting downloaded files from server..."
 ./server/clean_remote_no_prompt "$name" "$tag" "$server"

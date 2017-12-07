@@ -1,0 +1,19 @@
+#!/usr/bin/bash
+
+set -e
+set -u
+
+name="$1"
+tag="$2"
+commitish="$3"
+commit="$(git rev-parse "$commitish")"
+server="$4"
+
+scp -i "~/.ssh/canada-central.pem" server/server_setup "$server":.
+ssh -i "~/.ssh/canada-central.pem" "$server" -t "bash -ic \
+    '
+    set -e;
+    ./server_setup $commit $name $tag;
+    '"
+
+echo "Set up successfully"

@@ -25,6 +25,22 @@ def exec_run(args):
     server = experiment['server']
     subprocess.run(['./server/run_on_server', name, tag, commit, server])
 
+def exec_setup(args):
+    tag = args.tag
+    name = args.name
+    experiment = experiments[(name, tag)]
+    commit = experiment['commit']
+    server = experiment['server']
+    subprocess.run(['./server/setup_server', name, tag, commit, server])
+
+def exec_upload(args):
+    tag = args.tag
+    name = args.name
+    experiment = experiments[(name, tag)]
+    commit = experiment['commit']
+    server = experiment['server']
+    subprocess.run(['./server/upload_to_server', name, tag, commit, server])
+
 def exec_continue(args):
     tag = args.tag
     name = args.name
@@ -56,6 +72,16 @@ subparsers = parser.add_subparsers()
 
 subparser = subparsers.add_parser('list')
 subparser.set_defaults(func=exec_list)
+
+subparser = subparsers.add_parser('setup')
+subparser.add_argument('name')
+subparser.add_argument('tag')
+subparser.set_defaults(func=exec_setup)
+
+subparser = subparsers.add_parser('upload')
+subparser.add_argument('name')
+subparser.add_argument('tag')
+subparser.set_defaults(func=exec_upload)
 
 subparser = subparsers.add_parser('run')
 subparser.add_argument('name')
