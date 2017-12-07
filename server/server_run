@@ -4,6 +4,7 @@ set -u
 commit="$1"
 name="$2"
 tag="$3"
+overwrite="${4-}"
 script="./train/$name.py"
 git_dir_name="ml-experiments_$name-$tag"
 
@@ -21,7 +22,10 @@ do_exit() {
 trap do_exit ERR
 
 ./server_setup "$commit" "$name" "$tag"
-./server_check_exists "$name" "$tag"
+
+if [ "$overwrite" != "true" ]; then
+    ./server_check_exists "$name" "$tag"
+fi
 
 set +u
 export PATH="~/miniconda3/bin:$PATH"

@@ -11,19 +11,14 @@ with open('experiments.json', 'r') as f:
     for experiment in experiments_json:
         experiments[(experiment['name'], experiment['tag'])] = experiment
 
+def get_overwrite(args):
+    return 'true' if args.overwrite else ''
+
 def exec_list(args):
     format_str = '%-15s %-20s %-25s %s'
     print(format_str % ('name', 'tag', 'commit', 'server'))
     for experiment in experiments_json:
         print(format_str % (experiment['name'], experiment['tag'], experiment['commit'], experiment['server']))
-
-def exec_run(args):
-    tag = args.tag
-    name = args.name
-    experiment = experiments[(name, tag)]
-    commit = experiment['commit']
-    server = experiment['server']
-    subprocess.run(['./server/run_on_server', name, tag, commit, server])
 
 def exec_setup(args):
     tag = args.tag
@@ -36,24 +31,36 @@ def exec_setup(args):
 def exec_upload(args):
     tag = args.tag
     name = args.name
+    overwrite = get_overwrite(args)
     experiment = experiments[(name, tag)]
     commit = experiment['commit']
     server = experiment['server']
-    subprocess.run(['./server/upload_to_server', name, tag, commit, server])
+    subprocess.run(['./server/upload_to_server', name, tag, commit, server, overwrite])
+
+def exec_run(args):
+    tag = args.tag
+    name = args.name
+    overwrite = get_overwrite(args)
+    experiment = experiments[(name, tag)]
+    commit = experiment['commit']
+    server = experiment['server']
+    subprocess.run(['./server/run_on_server', name, tag, commit, server, overwrite])
 
 def exec_continue(args):
     tag = args.tag
     name = args.name
+    overwrite = get_overwrite(args)
     experiment = experiments[(name, tag)]
     server = experiment['server']
-    subprocess.run(['./server/continue_on_server', name, tag, server])
+    subprocess.run(['./server/continue_on_server', name, tag, server, overwrite])
 
 def exec_download(args):
     tag = args.tag
     name = args.name
+    overwrite = get_overwrite(args)
     experiment = experiments[(name, tag)]
     server = experiment['server']
-    subprocess.run(['./server/download_from_server', name, tag, server])
+    subprocess.run(['./server/download_from_server', name, tag, server, overwrite])
 
 def exec_clean_remote(args):
     tag = args.tag
@@ -81,21 +88,25 @@ subparser.set_defaults(func=exec_setup)
 subparser = subparsers.add_parser('upload')
 subparser.add_argument('name')
 subparser.add_argument('tag')
+subparser.add_argument('--overwrite', action='store_true')
 subparser.set_defaults(func=exec_upload)
 
 subparser = subparsers.add_parser('run')
 subparser.add_argument('name')
 subparser.add_argument('tag')
+subparser.add_argument('--overwrite', action='store_true')
 subparser.set_defaults(func=exec_run)
 
 subparser = subparsers.add_parser('continue')
 subparser.add_argument('name')
 subparser.add_argument('tag')
+subparser.add_argument('--overwrite', action='store_true')
 subparser.set_defaults(func=exec_continue)
 
 subparser = subparsers.add_parser('download')
 subparser.add_argument('name')
 subparser.add_argument('tag')
+subparser.add_argument('--overwrite', action='store_true')
 subparser.set_defaults(func=exec_download)
 
 subparser = subparsers.add_parser('clean-remote')

@@ -6,9 +6,12 @@ set -u
 name="$1"
 tag="$2"
 server="$3"
+overwrite="${4-}"
 git_dir_name="ml-experiments_$name-$tag"
 
-./server/check_saved_exists "$name" "$tag"
+if [ "$overwrite" != "true" ]; then
+    ./server/check_saved_exists "$name" "$tag"
+fi
 
 mkdir -p "saved_logs/$name/$tag"
 
@@ -33,12 +36,12 @@ script_status=${PIPESTATUS[0]}
 echo "SSH shell exit code: $script_status"
 
 if [ "$script_status" == "22" ] || [ "$script_status" == "0" ]; then
-    ./server/download_from_server "$name" "$tag" "$server"
+    ./server/download_from_server "$name" "$tag" "$server" "$overwrite"
 elif [ "$script_status" == "24" ]; then
     echo "Saved files exist on server."
     read -p "Do you want to download them? " -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ./server/download_from_server "$name" "$tag" "$server"
+        ./server/download_from_server "$name" "$tag" "$server" "$overwrite"
     fi
 fi

@@ -6,14 +6,15 @@ set -u
 name="$1"
 tag="$2"
 server="$3"
+overwrite="${4-}"
 git_dir_name="ml-experiments_$name-$tag"
 cp_cmd=(rsync -av --progress -e "ssh -i ~/.ssh/canada-central.pem")
 
-./server/check_saved_exists "$name" "$tag"
+if [ "$overwrite" != "true" ]; then
+    ./server/check_saved_exists "$name" "$tag"
+fi
 
 mkdir -p "saved_summaries/$name"
 "${cp_cmd[@]}" "$server:$git_dir_name/saved_summaries/$name/$tag" "saved_summaries/$name"
 mkdir -p "saved_models/$name"
 "${cp_cmd[@]}" "$server:$git_dir_name/saved_models/$name/$tag" "saved_models/$name"
-echo "Deleting downloaded files from server..."
-./server/clean_remote_no_prompt "$name" "$tag" "$server"
