@@ -8,7 +8,7 @@ tag="$2"
 server="$3"
 overwrite="${4-}"
 git_dir_name="ml-experiments_$name-$tag"
-cp_cmd=(rsync -av --progress -e "ssh -i ~/.ssh/canada-central.pem")
+cp_cmd=(rsync -av --progress --inplace -e "ssh -i ~/.ssh/canada-central.pem")
 
 if [ "$overwrite" != "true" ]; then
     ./server/check_saved_exists "$name" "$tag"
