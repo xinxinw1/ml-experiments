@@ -704,7 +704,7 @@ class LSTMModelBase(object):
         probs_dec = probs_dec[:7]
         return probs_dec
 
-    def sample(self, starting=None, max_num=50):
+    def sample(self, starting=None, max_num=50, context=200):
         """
         Args:
             starting: A thing that encodes to a python iterable of numbers
@@ -716,7 +716,8 @@ class LSTMModelBase(object):
         try:
             for i in range(max_num):
                 with tools.DelayedKeyboardInterrupt():
-                    encoded_inpt = self.encoding.make_input_for_sample(curr)
+                    # Sample using the last n chars where n = context
+                    encoded_inpt = self.encoding.make_input_for_sample(curr[-context:])
                     if self.next_probabilities is not None:
                         probs_batch = self._run(self.next_probabilities, [encoded_inpt])
                         probs = probs_batch[0]
