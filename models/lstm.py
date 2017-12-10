@@ -136,7 +136,7 @@ class BasicEncoding(Encoding):
         self.effective_alphabet_size = self.alphabet_size+2
         self.use_long = use_long
         if self.use_long:
-            max_batch_size = kwargs.get('max_batch_size', 2)
+            max_batch_size = kwargs.get('max_batch_size', 20)
             max_batch_width = kwargs.get('max_batch_width', 200)
             skip_padding = kwargs.get('skip_padding', False)
             self.batch_maker = tools.LongBatchMaker(max_batch_size, max_batch_width, self.pad_item, skip_padding)
@@ -388,7 +388,7 @@ class LSTMModelBase(object):
             # inputs_one_hot is a list of batches where each batch is a list of one hot encoded lists
             # inputs_one_hot is a tensor with dim batch_size x (timesteps+1) x (alphabet_size+1)
 
-            self.state_sizes = [2*self.effective_alphabet_size] * 1
+            self.state_sizes = [768] * 3
 
             # def make_init_state(i, state_size):
             #     return tf.placeholder(tf.float32, [2, None, state_size], name='init_state_' + str(i))
