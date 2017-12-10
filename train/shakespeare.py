@@ -9,4 +9,4 @@ import itertools
 
 path = os.path.join(config.DATA_DIR, 'shakespeare_input.txt')
 model = lstm.LSTMModelTextFileAlphabetFile('shakespeare', path, skip_padding=True, tag=setup.tag)
-model.train([path]*3, autosave=10000, cont=True, count=True)
+model.train([path]*60, autosave=20000, cont=True, count=True)
