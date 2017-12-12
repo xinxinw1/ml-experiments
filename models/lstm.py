@@ -136,7 +136,7 @@ class BasicEncoding(Encoding):
         self.effective_alphabet_size = self.alphabet_size+2
         self.use_long = use_long
         if self.use_long:
-            max_batch_size = kwargs.get('max_batch_size', 2)
+            max_batch_size = kwargs.get('max_batch_size', 60)
             max_batch_width = kwargs.get('max_batch_width', 200)
             skip_padding = kwargs.get('skip_padding', False)
             self.batch_maker = tools.LongBatchMaker(max_batch_size, max_batch_width, self.pad_item, skip_padding)
