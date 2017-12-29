@@ -13,16 +13,9 @@ def lstm_kwargs(tmpdir):
         'saved_summaries_dir': str(tmpdir.mkdir('summaries'))
     }
 
-@pytest.fixture
-def lstm_kwargs_1(lstm_kwargs):
-    return dict(lstm_kwargs, tag='test-1')
-
-@pytest.fixture
-def lstm_kwargs_2(lstm_kwargs):
-    return dict(lstm_kwargs, tag='test-2')
-
-def test_simple_short(lstm_kwargs_1, lstm_kwargs_2):
-    model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_1)
+def test_simple_short(lstm_kwargs):
+    encoding = [('numbers', 2)]
+    model = lstm.LSTMModel('test-simple', 'test-1', encoding=encoding, decoding=encoding, **lstm_kwargs)
     model.train([[1, 0]] * 1000)
     s = model.sample()
     assert isinstance(s, list)
@@ -31,7 +24,7 @@ def test_simple_short(lstm_kwargs_1, lstm_kwargs_2):
     model.save_to_file()
     model.sample([1])
 
-    model = lstm.LSTMModelFromFile('test-simple', **lstm_kwargs_1)
+    model = lstm.LSTMModelFromFile('test-simple', 'test-1', **lstm_kwargs)
     s = model.sample()
     assert isinstance(s, list)
     print(s)
@@ -43,17 +36,17 @@ def test_simple_short(lstm_kwargs_1, lstm_kwargs_2):
     # Double saving is ok
     model.save_to_file()
 
-    model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_1)
+    model = lstm.LSTMModel('test-simple', 'test-1', encoding=encoding, decoding=encoding, **lstm_kwargs)
     model.train([[1, 0]] * 1000, autosave=30)
 
-    model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_2)
+    model = lstm.LSTMModel('test-simple', 'test-2', encoding=encoding, decoding=encoding, **lstm_kwargs)
     model.train([[1, 0]] * 1000, autosave=30)
     model.train([[1, 0]] * 1000, autosave=True)
 
-    model = lstm.LSTMModel('test-simple', 2, **lstm_kwargs_2)
+    model = lstm.LSTMModel('test-simple', 'test-2', encoding=encoding, decoding=encoding, **lstm_kwargs)
     model.train([[1, 0]] * 1000, autosave=30, count=True)
 
-    model = lstm.LSTMModelFromFile('test-simple-copy', from_name='test-simple', training_steps=100, **lstm_kwargs_1)
+    model = lstm.LSTMModelFromFile('test-simple-copy', 'test-1', from_name='test-simple', training_steps=100, **lstm_kwargs)
     model.train([[1, 0]] * 1000, autosave=30)
 
 def test_simple_alphabet_short(lstm_kwargs_1):

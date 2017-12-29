@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 import config
 
 import tools
+import encoding
 
 """
 Directory structure:
@@ -330,18 +331,16 @@ for encoding_class in encoding_classes:
     encodings[encoding_class.encoding_name] = encoding_class
 
 class LSTMModelBase(object):
-    def __init__(self, name, tag=None, saved_models_dir=None, saved_summaries_dir=None):
+    def __init__(self, name, tag, saved_models_dir=None, saved_summaries_dir=None):
         self.uuid = uuid.uuid4()
         logging.info('Running __init__ %s' % self.uuid)
         self.name = name
-        if tag is None:
-            tag = config.TAG
+        self.tag = tag
         logging.info('Using tag %s and name %s' % (tag, name))
         if saved_models_dir is None:
             saved_models_dir = config.SAVED_MODELS_DIR
         if saved_summaries_dir is None:
             saved_summaries_dir = config.SAVED_SUMMARIES_DIR
-        self.tag = tag
         self.saved_models_dir = saved_models_dir
         self.saved_summaries_dir = saved_summaries_dir
         self.training_steps = 0
@@ -358,21 +357,45 @@ class LSTMModelBase(object):
             self.sess = None
             logging.info('Closed session %s' % self.uuid)
 
-    def _setup_encoding(self, encoding_name, *args, **kwargs):
-        self.encoding = encodings[encoding_name](*args, **kwargs)
-        load_params = self.encoding.get_load_params()
-        if load_params is None:
-            self.encoding_name = encoding_name
-            self.encoding_args = args
-            self.encoding_kwargs = kwargs
+    def _setup_encoding(self, *args, **kwargs):
+        if 'encoding' in kwargs:
+            encoding_objects = encoding.encoder_names_to_objects(kwargs['encoding'])
+            self.train_encoding = self.testing_encoding = encoding_objects
+        if 'train_encoding' in kwargs:
+            self.train_encoding = encoding.encoder_names_to_objects(kwargs['train_encoding'])
+        if 'testing_encoding' in kwargs:
+            self.testing_encoding = encoding.encoder_names_to_objects(kwargs['testing_encoding'])
+        if 'decoding' in kwargs:
+            decoding_objects = encoding.encoder_names_to_objects(kwargs['decoding'])
+            self.decoding = decoding_objects
+        self.sample_default = encoding.get_empty_single(self.testing_encoding)
+        # Use train encoding for alphabet size because that is the most important
+        self.alphabet_size = encoding.get_alphabet_size(self.train_encoding)
+        self.use_tokens = tools.get_or_set(kwargs, 'use_tokens', True)
+        if self.use_tokens:
+            self.token_item = self.alphabet_size
+            self.pad_item = self.alphabet_size+1
+            self.effective_alphabet_size = self.alphabet_size+2
+            self.max_batch_size = tools.get_or_set(kwargs, 'max_batch_size', 10)
+            self.batch_maker = tools.ShortBatchMaker(self.max_batch_size, self.token_item, self.pad_item)
         else:
-            self.encoding_name, self.encoding_args, self.encoding_kwargs = load_params
-        self.alphabet_size = self.encoding.alphabet_size
-        self.effective_alphabet_size = self.encoding.effective_alphabet_size
+            self.skip_padding = tools.get_or_set(kwargs, 'skip_padding', False)
+            if self.skip_padding:
+                self.pad_item = None
+                self.effective_alphabet_size = self.alphabet_size
+            else:
+                self.pad_item = self.alphabet_size
+                self.effective_alphabet_size = self.alphabet_size+1
+            self.max_batch_size = tools.get_or_set(kwargs, 'max_batch_size', 2)
+            self.max_batch_width = tools.get_or_set(kwargs, 'max_batch_width', 200)
+            self.batch_maker = tools.LongBatchMaker(self.max_batch_size, self.max_batch_width, self.pad_item)
 
-    def init_from_encoding(self, encoding_name, *args, **kwargs):
+        self.encoding_args = args
+        self.encoding_kwargs = kwargs
+
+    def init_from_encoding(self, *args, **kwargs):
         logging.info('Initializing from encoding...')
-        self._setup_encoding(encoding_name, *args, **kwargs)
+        self._setup_encoding(*args, **kwargs)
 
         self._close_sess_if_open()
         self.graph = tf.Graph()
@@ -586,23 +609,26 @@ class LSTMModelBase(object):
             # logging.info('End run.')
             return results
 
+    def _encode_for_testing(self, inpt):
+        return encoding.encode_single(inpt, self.testing_encoding)
+
     def _decode_output(self, outpt):
-        return self.encoding.decode_output(outpt)
+        return encoding.encode_single(outpt, self.decoding)
 
     def _decode_if_ok(self, num):
-        return self.encoding.decode_num(num) if num < self.alphabet_size else num
+        return encoding.encode_individual(num, self.decoding) if num < self.alphabet_size else num
 
     def _decode_output_to_list(self, outpt):
         return list(map(self._decode_if_ok, outpt))
 
     def encode_and_make_batches_for_training(self, inputs):
-        inputs = map(self.encoding.encode_input_for_training, inputs)
-        batches = self.encoding.make_batches_for_training(inputs)
+        inputs = encoding.encode_multiple(inputs, self.train_encoding)
+        batches = self.batch_maker.make_batches_for_training(inputs)
         return batches
 
     def encode_and_count_batches_for_training(self, inputs):
-        inputs = map(self.encoding.encode_input_for_training, inputs)
-        count = self.encoding.count_batches_for_training(inputs)
+        inputs = encoding.encode_multiple(inputs, self.train_encoding)
+        count = self.batch_maker.count_batches_for_training(inputs)
         return count
 
     def train(self, inputs, autosave=None, cont=False, count=False, save_graph=True):
@@ -710,14 +736,14 @@ class LSTMModelBase(object):
             starting: A thing that encodes to a python iterable of numbers
         """
         if starting is None:
-            starting = self.encoding.empty()
-        curr = list(self.encoding.encode_input_for_testing(starting))
+            starting = self.sample_default
+        curr = list(self._encode_for_testing(starting))
         curr_output = list(curr)
         try:
             for i in range(max_num):
                 with tools.DelayedKeyboardInterrupt():
                     # Sample using the last n chars where n = context
-                    encoded_inpt = self.encoding.make_input_for_sample(curr[-context:])
+                    encoded_inpt = self.batch_maker.make_input_for_sample(curr[-context:])
                     if self.next_probabilities is not None:
                         probs_batch = self._run(self.next_probabilities, [encoded_inpt])
                         probs = probs_batch[0]
@@ -729,22 +755,23 @@ class LSTMModelBase(object):
                     next_dec = self._decode_if_ok(next_int)
                     probs_dec = self._make_probs_dec(probs)
                     logging.info('Step %s: curr: %s next: %s probs: %s' % (i, curr_dec, repr(next_dec), probs_dec))
-                    if next_int == self.encoding.token_item:
+                    if self.use_tokens and next_int == self.token_item:
                         break
                     if next_int < self.alphabet_size:
+                        # This happens when next_int is a padding item
                         curr_output.append(next_int)
                     curr.append(next_int)
         except KeyboardInterrupt:
             logging.info('Cancelling sample...')
-        return self.encoding.decode_output(curr_output)
+        return self._decode_output(curr_output)
 
     def analyze(self, inpt):
         """
         Args:
             starting: A thing that encodes to a python iterable of numbers
         """
-        lst = list(self.encoding.encode_input_for_testing(inpt))
-        batch = self.encoding.make_batch_for_analysis(lst)
+        lst = list(self._encode_for_testing(inpt))
+        batch = self.batch_maker.make_batch_for_analysis(lst)
         labels_batch, losses_batch, probs_batch = self._run_batch(
                 [self.labels, self.losses, self.probabilities], batch)
         labels = labels_batch[0].tolist()
@@ -754,44 +781,16 @@ class LSTMModelBase(object):
         for item, loss, probs in zip(lst_dec, losses, probs_list):
             print('%-5s %-11.8f %s' % (repr(item), loss, probs))
 
-class LSTMModelEncoding(LSTMModelBase):
-    def __init__(self, name, encoding_name, *args, tag=None,
+class LSTMModel(LSTMModelBase):
+    def __init__(self, name, tag, *args,
             saved_models_dir=None, saved_summaries_dir=None, **kwargs):
-        super(LSTMModelEncoding, self).__init__(name, tag=tag,
+        super(LSTMModel, self).__init__(name, tag,
                 saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
-        self.init_from_file_or_encoding(encoding_name, *args, **kwargs)
-
-class LSTMModel(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'basic', *args, **kwargs)
-
-class LSTMModelAlphabet(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'alphabet', *args, **kwargs)
-
-class LSTMModelString(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'string', *args, **kwargs)
-
-class LSTMModelStringAlphabet(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'string-alphabet', *args, **kwargs)
-
-class LSTMModelTextFile(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'text-file', *args, **kwargs)
-
-class LSTMModelTextFileAlphabet(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'text-file-alphabet', *args, **kwargs)
-
-class LSTMModelTextFileAlphabetFile(LSTMModelEncoding):
-    def __init__(self, name, *args, **kwargs):
-        LSTMModelEncoding.__init__(self, name, 'text-file-alphabet-file', *args, **kwargs)
+        self.init_from_file_or_encoding(*args, **kwargs)
 
 class LSTMModelFromFile(LSTMModelBase):
-    def __init__(self, name, tag=None, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
-        super(LSTMModelFromFile, self).__init__(name, tag=tag,
+    def __init__(self, name, tag, saved_models_dir=None, saved_summaries_dir=None, **kwargs):
+        super(LSTMModelFromFile, self).__init__(name, tag,
                 saved_models_dir=saved_models_dir, saved_summaries_dir=saved_summaries_dir)
         self.init_from_file(**kwargs)
 

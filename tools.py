@@ -421,3 +421,10 @@ class TimeRemaining(object):
 
 def exit(code):
     sys.exit(code)
+
+def get_or_set(data, name, value):
+    # Set the value like this so when the model is saved, the value actually used
+    # is restored
+    if name not in data:
+        data[name] = value
+    return data[name]
