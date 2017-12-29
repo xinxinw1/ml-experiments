@@ -13,6 +13,11 @@ def assert_iter_equals(it, exp, assert_fn=assert_equals):
     with pytest.raises(StopIteration):
         next(it)
 
+def assert_list_np_arrays_equals(a, b):
+    for inner_a, inner_b in zip(a, b):
+        assert (inner_a == inner_b).all()
+        assert inner_a.shape == np.array(inner_b).shape
+
 def test_group():
     assert list(tools.group([1, 2, 3], 2)) == [[1, 2], [3]]
     assert list(tools.group([1, 2, 3, 4], 2)) == [[1, 2], [3, 4]]
@@ -104,85 +109,316 @@ def test_make_batches_long_infinite():
     ]
     assert_iter_equals(batches, expected)
 
-def test_LongBatchMaker():
-    def assert_fn(a, b):
-        for inner_a, inner_b in zip(a, b):
-            assert (inner_a == inner_b).all()
-            assert inner_a.shape == np.array(inner_b).shape
+def test_BatchMaker_no_token():
+    maker = tools.BatchMaker(2, max_batch_width=3, pad_item=0)
 
-    maker = tools.LongBatchMaker(2, 3, 0)
-
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7]], [[8]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9]], [[8, 9, 10]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9], [10, 0, 0]], [[8, 9, 10], [11, 0, 0]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9], [10, 11, 12]], [[8, 9, 10], [11, 12, 13]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-def test_LongBatchMaker_skip_padding():
-    def assert_fn(a, b):
-        for inner_a, inner_b in zip(a, b):
-            assert (inner_a == inner_b).all()
-            assert inner_a.shape == np.array(inner_b).shape
+def test_BatchMaker_no_token_no_pad():
+    maker = tools.BatchMaker(2, max_batch_width=3, pad_item=None)
 
-    maker = tools.LongBatchMaker(2, 3, 0, skip_padding=True)
-
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7]], [[8]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9]], [[8, 9, 10]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
-        ([[7, 8, 9]], [[8, 9, 10]])
+        ([[7, 8, 9]], [[8, 9, 10]]),
+        ([[10]], [[11]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
 
-    inputs = iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    inputs = iter([iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])])
     batches = maker.make_batches_for_training(inputs)
     expected = [
         ([[1, 2, 3], [4, 5, 6]], [[2, 3, 4], [5, 6, 7]]),
         ([[7, 8, 9], [10, 11, 12]], [[8, 9, 10], [11, 12, 13]])
     ]
-    assert_iter_equals(batches, expected, assert_fn)
+    assert_iter_equals(batches, expected, assert_list_np_arrays_equals)
+
+def test_ArrayManager():
+    arr = tools.ArrayManager(5, max_width=3, pad_item=0)
+    data = [[1, 2], [2, 3, 4], [4, 5, 6, 7], [1], [], [3, 4]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 0],
+            [2, 3, 4],
+            [4, 5, 6],
+            [7, 0, 0],
+            [1, 0, 0]
+        ],
+        [
+            [0, 0],
+            [3, 4]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [10, 11, 12],
+            [13, 14, 15]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2]]
+    results = []
+    exp_results = [
+        [
+            [1, 2]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2], [3, 4]]
+    results = []
+    exp_results = [
+        [
+            [1, 2],
+            [3, 4]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+def test_ArrayManager_no_max_width():
+    arr = tools.ArrayManager(5, max_width=None, pad_item=9)
+    data = [[1, 2], [2, 3, 4], [4, 5, 6, 7], [1], [], [3, 4]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 9, 9],
+            [2, 3, 4, 9],
+            [4, 5, 6, 7],
+            [1, 9, 9, 9],
+            [9, 9, 9, 9]
+        ],
+        [
+            [3, 4]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2], [2, 3, 4, 4, 5, 6, 7]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 9, 9, 9, 9, 9],
+            [2, 3, 4, 4, 5, 6, 7]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+def test_ArrayManager_no_pad_item():
+    arr = tools.ArrayManager(5, max_width=3, pad_item=None)
+    data = [[1, 2], [2, 3, 4], [4, 5, 6, 7], [1], [], [3, 4]]
+    results = []
+    exp_results = [
+        [
+            [1, 2]
+        ],
+        [
+            [2, 3, 4],
+            [4, 5, 6],
+        ],
+        [
+            [7],
+            [1]
+        ],
+        [
+            []
+        ],
+        [
+            [3, 4]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2], [2, 3, 4], [4, 5]]
+    results = []
+    exp_results = [
+        [
+            [1, 2]
+        ],
+        [
+            [2, 3, 4]
+        ],
+        [
+            [4, 5]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2, 3, 4, 5, 6, 7]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 3],
+            [4, 5, 6]
+        ],
+        [
+            [7]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+def test_ArrayManager_no_max_width_no_pad_item():
+    arr = tools.ArrayManager(5, max_width=None, pad_item=None)
+    data = [[1, 2], [2, 3, 4], [4, 5, 6, 7], [1], [], [3, 4]]
+    results = []
+    exp_results = [
+        [
+            [1, 2]
+        ],
+        [
+            [2, 3, 4]
+        ],
+        [
+            [4, 5, 6, 7],
+        ],
+        [
+            [1]
+        ],
+        [
+            []
+        ],
+        [
+            [3, 4]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2, 3], [2, 3, 4], [4, 5]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 3],
+            [2, 3, 4]
+        ],
+        [
+            [4, 5]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
+
+    data = [[1, 2, 3, 4, 5, 6, 7]]
+    results = []
+    exp_results = [
+        [
+            [1, 2, 3, 4, 5, 6, 7]
+        ]
+    ]
+    for inpt in data:
+        for ind in inpt:
+            results.extend(map(np.copy, arr.add_ind(ind)))
+        results.extend(map(np.copy, arr.end_of_inpt()))
+    results.extend(map(np.copy, arr.end_of_inputs()))
+    assert_list_np_arrays_equals(results, exp_results)
 
 @pytest.mark.parametrize('use_iter', [
     (False), (True)])

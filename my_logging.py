@@ -7,7 +7,7 @@ from logging import INFO
 from logging import WARN
 
 _logger = _logging.getLogger('xin-xin')
-_logger.setLevel(INFO)
+_logger.setLevel(DEBUG)
 _handler = _logging.StreamHandler()
 _handler.setFormatter(_logging.Formatter('%(levelname)s %(asctime)-15s %(message)s', None))
 _logger.addHandler(_handler)

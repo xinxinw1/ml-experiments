@@ -8,6 +8,7 @@ import signal
 import os
 import sys
 import glob
+import uuid
 from datetime import datetime, timedelta
 
 def group(lst, n):
@@ -151,7 +152,7 @@ class LongBatchMaker(object):
         Returns:
             batches: A python iterator of batches where each batch is a
                 tuple (inputs batch, labels batch) and each batch part
-                is a python list of lists of numbers
+                is a numpy array of numbers
         """
         inputs_it, labels_it = itertools.tee(inputs)
         inputs_it = drop_last(inputs_it)
@@ -211,23 +212,162 @@ class LongBatchMaker(object):
         labels = [inpt[1:]]
         return (inputs, labels)
 
-class ShortBatchMaker(object):
-    def __init__(self, max_batch_size, token_item, pad_item):
-        self.max_batch_size = max_batch_size
-        self.token_item = token_item
+class ArrayManager(object):
+    """
+    Array manager strategy:
+        For every inpt item:
+            If pad_item is None and curr line len + 1 > prev line length:
+                send previous lines and clear
+            If curr line len + 1 > max_width:
+                move to next line
+            If curr line len + 1 > curr_width:
+                expand array
+            Add inpt item horizontally
+        When an end_of_inpt is received,
+            If pad_item is None
+                If curr line length < prev line length,
+                    send previous lines and shift curr line to top
+                else
+                    move to next line
+            else
+                pad until curr_width
+                move to next line
+        When an end_of_inputs is received,
+            Send previous lines and clear
+    """
+
+    def __init__(self, max_height, max_width=None, pad_item=None):
+        if max_width is None:
+            max_width = math.inf
+        self.max_height = max_height
+        self.max_width = max_width
+        self.curr_width = max_width if max_width != math.inf else 2
+        self.array = np.zeros((max_height, self.curr_width), dtype=np.int32)
+        self.max_prev_hori_len = None
+        self.curr_hori_len = 0
+        # Number of completed vertical lines
+        self.curr_vert_len = 0
         self.pad_item = pad_item
+        self.uuid = str(uuid.uuid4())
+        logging.debug(self.uuid + ' Construct')
+
+    def move_to_next_line(self):
+        logging.debug(self.uuid + ' Move to next line')
+        self.curr_vert_len += 1
+        if self.max_prev_hori_len is None:
+            self.max_prev_hori_len = self.curr_hori_len
+        else:
+            self.max_prev_hori_len = max(self.max_prev_hori_len, self.curr_hori_len)
+        logging.debug(self.uuid + ' max prev hori len %s' % self.max_prev_hori_len)
+        self.curr_hori_len = 0
+
+    def clear(self):
+        logging.debug(self.uuid + ' Clearing')
+        self.curr_vert_len = 0
+        self.max_prev_hori_len = None
+        self.curr_hori_len = 0
+
+    def expand_array(self):
+        logging.debug(self.uuid + ' Expanding array')
+        new_width = self.curr_width*2
+        if self.pad_item is not None:
+            new_array = np.full((self.max_height, new_width), self.pad_item, dtype=np.int32)
+        else:
+            new_array = np.zeros((self.max_height, new_width), dtype=np.int32)
+        new_array[:self.array.shape[0], :self.array.shape[1]] = self.array
+        self.array = new_array
+        self.curr_width = new_width
+        logging.debug(self.uuid + ' New width %s' % new_width)
+
+    def add_ind(self, ind):
+        logging.debug(self.uuid + ' add ind %s curr vert %s curr hori %s' % (ind, self.curr_vert_len, self.curr_hori_len))
+        if self.curr_hori_len + 1 > self.max_width:
+            logging.debug(self.uuid + ' passed max width')
+            # If curr line is at max_width, move to next line
+            self.move_to_next_line()
+            if self.curr_vert_len == self.max_height:
+                logging.debug(self.uuid + ' yielding curr vert %s prev hori %s' % (self.curr_vert_len, self.max_prev_hori_len))
+                yield self.array[:self.curr_vert_len, :self.max_prev_hori_len]
+                self.clear()
+        if self.pad_item is None and self.max_prev_hori_len is not None and self.curr_hori_len + 1 > self.max_prev_hori_len:
+            logging.debug(self.uuid + ' no pad item and line too long')
+            # If there is no padding and this line is too long,
+            # send previous lines first
+            curr_line_idx = self.curr_vert_len
+            curr_hori_len = self.curr_hori_len
+            logging.debug(self.uuid + ' yielding curr vert %s prev hori %s' % (self.curr_vert_len, self.max_prev_hori_len))
+            yield self.array[:self.curr_vert_len, :self.max_prev_hori_len]
+            self.clear()
+            self.array[0] = self.array[curr_line_idx]
+            self.curr_hori_len = curr_hori_len
+        if self.curr_hori_len + 1 > self.curr_width:
+            self.expand_array()
+        logging.debug(self.uuid + ' added at curr vert %s curr hori %s' % (self.curr_vert_len, self.curr_hori_len))
+        self.array[self.curr_vert_len, self.curr_hori_len] = ind
+        self.curr_hori_len += 1
+
+    def end_of_inpt(self):
+        logging.debug(self.uuid + ' end of inpt curr vert %s curr hori %s' % (self.curr_vert_len, self.curr_hori_len))
+        if self.pad_item is None:
+            if self.max_prev_hori_len is not None and self.curr_hori_len < self.max_prev_hori_len:
+                # If there is no padding and this line is shorter than previous ones,
+                # send previous lines first
+                curr_line_idx = self.curr_vert_len
+                curr_hori_len = self.curr_hori_len
+                logging.debug(self.uuid + ' yielding curr vert %s prev hori %s' % (self.curr_vert_len, self.max_prev_hori_len))
+                yield self.array[:self.curr_vert_len, :self.max_prev_hori_len]
+                self.clear()
+                self.array[0] = self.array[curr_line_idx]
+                self.curr_hori_len = curr_hori_len
+        else:
+            # If there is padding, pad the end of the line
+            self.array[self.curr_vert_len, self.curr_hori_len:] = self.pad_item
+        self.move_to_next_line()
+        if self.curr_vert_len == self.max_height:
+            logging.debug(self.uuid + ' yielding curr vert %s prev hori %s' % (self.curr_vert_len, self.max_prev_hori_len))
+            yield self.array[:self.curr_vert_len, :self.max_prev_hori_len]
+            self.clear()
+
+    def end_of_inputs(self):
+        logging.debug(self.uuid + ' end of inputs curr vert %s curr hori %s' % (self.curr_vert_len, self.curr_hori_len))
+        # Assume end_of_inpt was already called
+        assert self.curr_hori_len == 0
+        if self.curr_vert_len > 0:
+            logging.debug(self.uuid + ' yielding curr vert %s prev hori %s' % (self.curr_vert_len, self.max_prev_hori_len))
+            yield self.array[:self.curr_vert_len, :self.max_prev_hori_len]
+            self.clear()
+
+class BatchMaker(object):
+    def __init__(self, max_batch_size, max_batch_width=None, token_item=None, pad_item=None):
+        self.inputs_array = ArrayManager(max_batch_size, max_batch_width, pad_item)
+        self.labels_array = ArrayManager(max_batch_size, max_batch_width, pad_item)
+        self.token_item = token_item
 
     def make_batches_for_training(self, inputs):
         """
         Args:
-            inputs: A python iterable of python lists of numbers
+            inputs: A python iterable of python iterables of numbers
         Returns:
             batches: A python iterator of batches where each batch is a
                 tuple (inputs batch, labels batch) and each batch part
-                is a python list of lists of numbers
+                is a numpy array of numbers
         """
-        return make_batches_with_start_end(inputs, self.max_batch_size,
-                self.token_item, self.pad_item)
+        for inpt in inputs:
+            if self.token_item is not None:
+                inpt = itertools.chain([self.token_item], inpt, [self.token_item])
+            inpt, labl = itertools.tee(inpt)
+            inpt = drop_last(inpt)
+            labl = itertools.islice(labl, 1, None)
+            for ind, lab in zip(inpt, labl):
+                logging.debug('ind %s lab %s' % (ind, lab))
+                # Use zip_longest to ensure that iterators are exhausted even when one is empty
+                # Using list() doesn't work because it exhausts the iterators too quickly
+                for batch_tuple in itertools.zip_longest(self.inputs_array.add_ind(ind), self.labels_array.add_ind(lab)):
+                    yield batch_tuple
+            for batch_tuple in itertools.zip_longest(self.inputs_array.end_of_inpt(), self.labels_array.end_of_inpt()):
+                yield batch_tuple
+        for batch_tuple in itertools.zip_longest(self.inputs_array.end_of_inputs(), self.labels_array.end_of_inputs()):
+            yield batch_tuple
 
     def count_batches_for_training(self, inputs):
         """
