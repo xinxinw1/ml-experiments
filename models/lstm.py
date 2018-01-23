@@ -20,6 +20,12 @@ import config
 import tools
 
 """
+Terminology:
+    input/inpt: A single string or list of numbers
+    inputs: An iterable where each element is an input
+    exp_output/exp_outpt: A list of numbers
+    exp_outputs: An iterable where each element is an exp_output
+
 Directory structure:
     saved_models/
         shakespeare/

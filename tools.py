@@ -330,6 +330,11 @@ def file_to_chars(path):
 def file_to_bytes(path):
     return flatmap(string_to_bytes, file_to_chars(path))
 
+def file_to_lines(path):
+    with open(path, 'r') as f:
+        for line in f:
+            yield line.rstrip('\n')
+
 def file_to_alphabet(path):
     lst = list(set(file_to_chars(path)))
     lst.sort()
