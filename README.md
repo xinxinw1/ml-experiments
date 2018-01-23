@@ -61,26 +61,21 @@ $ python
 Example output:
 
 ```
-To gain hy greatness in mine ornament!
+Three milks ill off, the whore of all our statues
+Upon the world musicians stronger than a
+man,--mether with all man's pies and springs: 'tis wonderful
+hearing, latter it; that thou art valued withal.
 
-ALL:
-And bid me grow to bed and wear my food;
-And roused with singularity intercept her
-As oaths move just and man's enduaring Moor;
-But thou, volubour, pomp, where thou best well
-For our advantage.
+STINUS:
+Go seek him hither; now and ecstasy
+Where it may stand like pinchad. Wither grandam
+Of violent hand hath sent me out: 'tis done,
+Who may win brain of citch me on those shot
+Whilst you with a prenew music is it so?
 
-SIR TOBY BELCH:
-Sir, the beggar's, I guvet him.
-
-SIR TOBY BELCH:
-Out, Signior Beluf: are you more better
-than your issue?
-
-VIOLA:
-There is no woes of Those that have offended:
-So have I heard my epith with these courtesy:
-Which draws I tell you, that your king 
+BASTARD:
+If thou be plainle, I'll plugued thee in a
+clean with sign and thin
 ```
 
 Note: This example was generated using a model with higher parameters than the ones in the repository by default, so your output may look a bit different.
